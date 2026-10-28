@@ -1531,16 +1531,17 @@ SCENARIOS = [
         },
     ),
     (
-        # GERÇEK Trivy SARIF şekli: properties.severity YOK, seviye
-        # message.text içinde. MEDIUM/LOW bloklamamalı (canlı PR'da 13
-        # MEDIUM/LOW bulgu HIGH sanılıp gate kırmızı oluyordu).
+        # GERÇEK Trivy SARIF şekli (trivy 0.74 ölçümü): properties.severity
+        # YOK, seviye message.text içinde, `level` bandı da tutarlı
+        # (MEDIUM→warning). MEDIUM/LOW bloklamamalı: etiketsiz sonuç eski
+        # 'HIGH' default'u yüzünden HIGH diye raporlanip gate'i kırıyordu.
         "trivy: gerçek SARIF (message Severity: MEDIUM) → bloklamaz",
         "trivy_sarif_pr_comment.js",
         {"trivy.sarif": json.dumps({
             "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
                       "results": [{
                           "ruleId": "CVE-2025-8869",
-                          "level": "error",
+                          "level": "warning",
                           "message": {"text": "Package: pip\nInstalled "
                                              "Version: 24.0\nVulnerability "
                                              "CVE-2025-8869\nSeverity: MEDIUM\n"
@@ -1584,6 +1585,83 @@ SCENARIOS = [
             "body_contains": {"issues.createComment": [
                 MARKER_TRIVY, "CVE-2024-9999", "HIGH", "diff-dışı",
                 "diff-içi: 0"]},
+        },
+    ),
+    # ── Ölçülmüş Trivy SARIF şekli: mesajda "Severity:" satırı yoksa `level`
+    #    bandı devreye girer (error↔CRITICAL/HIGH, warning↔MEDIUM,
+    #    note↔LOW; trivy 0.74.0, 82 bulgu). Onsuz bu sınıf yalnız UNKNOWN
+    #    olarak blokluyordu; eşik MEDIUM/LOW içermiyorsa bloklamazlar.
+    (
+        "trivy: level=warning (mesajda Severity yok) → MEDIUM, bloklamaz",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2025-1001",
+                          "level": "warning",
+                          "message": {"text": "Package: requests\n"
+                                             "Vulnerability CVE-2025-1001\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "requirements.txt"}}}]}]}]}),
+         "changed_files.txt": "requirements.txt\n",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok"]},
+            "body_not_contains": {"issues.createComment": [
+                "CVE-2025-1001", "| HIGH |"]},
+        },
+    ),
+    (
+        "trivy: level=note (mesajda Severity yok) → LOW, bloklamaz",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2025-1002",
+                          "level": "note",
+                          "message": {"text": "Package: PyYAML\n"
+                                             "Vulnerability CVE-2025-1002\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "requirements.txt"}}}]}]}]}),
+         "changed_files.txt": "requirements.txt\n",
+         "mock_env.json": json.dumps(TRIVY_GATE_ENV)},
+        None, [], [],
+        {
+            "ok": True, "set_failed": False,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                MARKER_TRIVY, "CRITICAL/HIGH bulgu yok"]},
+            "body_not_contains": {"issues.createComment": [
+                "CVE-2025-1002", "| HIGH |"]},
+        },
+    ),
+    (
+        # level bandı da eşiğe tabidir: eşik MEDIUM içeriyorsa warning bloklar.
+        "trivy: level=warning + eşik MEDIUM içeriyor → MEDIUM bloğu",
+        "trivy_sarif_pr_comment.js",
+        {"trivy.sarif": json.dumps({
+            "runs": [{"tool": {"driver": {"name": "Trivy", "rules": []}},
+                      "results": [{
+                          "ruleId": "CVE-2025-1003",
+                          "level": "warning",
+                          "message": {"text": "Package: requests\n"
+                                             "Vulnerability CVE-2025-1003\n"},
+                          "locations": [{"physicalLocation": {
+                              "artifactLocation": {"uri": "requirements.txt"}}}]}]}]}),
+         "changed_files.txt": "",
+         "mock_env.json": json.dumps({
+             "TRIVY_SEVERITY": "CRITICAL,HIGH,MEDIUM",
+             "TRIVY_IGNORE_UNFIXED": "true"})},
+        None, [], [],
+        {
+            "ok": True, "set_failed": True,
+            "call_counts": {"issues.createComment": 1},
+            "body_contains": {"issues.createComment": [
+                "CVE-2025-1003", "| MEDIUM |", "Kapı: CRITICAL,HIGH,MEDIUM"]},
         },
     ),
     (
