@@ -57,7 +57,11 @@ jobs:
   verify:
     name: Delivery verification — K1-K19 (single entry point)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 20 dk, birim testleri (~7 dk) + araç kurulumları (~8 dk) + --full (~12 dk)
+    # + pre-commit (~5 dk) toplamının altında kalıyordu: job limitte kesiliyor
+    # (conclusion "cancelled") ve başarısız "Run full verification" adımının
+    # log'u/kanıtı hiç yüklenmiyordu. 40 dk, tek koşuda kanıt üretecek pay.
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v7
