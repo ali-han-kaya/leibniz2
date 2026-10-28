@@ -5,5 +5,8 @@
   "description": "PNG deck'leri gerçek .pptx'e çeviren jeneratörler (skill: pptx / pptxgenjs)",
   "dependencies": {
     "pptxgenjs": "^4.0.1"
+  },
+  "overrides": {
+    "image-size": "^2.0.3"
   }
 }

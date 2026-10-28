@@ -153,7 +153,9 @@ HOOKS = [
 
     # 26) check-dockerfile-security-patching: yama-desen sözleşmesi
     # (değişim-farkında: --all-files Dockerfile'ı eşler → süit koşar).
-    ("check-dockerfile-security-patching", "Dockerfile security-patching contract", 0, 0,
+    # 2026-10-28: desen npm yüzeylerini de eşler (.dockerignore +
+    # package(-lock).json) — ad buna göre güncellendi.
+    ("check-dockerfile-security-patching", "Dockerfile/npm security-patching contract", 0, 0,
      [r"Passed"], [], 10),
 
     # 22) commit-msg-style: commit mesaji noise denetimi (ozel — pre-commit run ile calismaz)

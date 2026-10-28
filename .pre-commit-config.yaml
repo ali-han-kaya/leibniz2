@@ -1099,22 +1099,25 @@ repos:
         verbose: true
 
       - id: check-dockerfile-security-patching
-        name: "Dockerfile security-patching contract (fail-closed)"
+        name: "Dockerfile/npm security-patching contract (fail-closed)"
         description: >-
           test_dockerfile_security_patching.py — docs/DOCKER_SECURITY_PATCHING.md
-          desenini Dockerfile'da sözleşme satırlarıyla sabitler:
-          SECURITY_PATCH_PACKAGES CVE-defteri default'u, --only-upgrade
-          (tüm-upgrade yasağı), apt hijyeni, dpkg-query kanıt satırı,
-          bookworm dağıtım pini, pip floor deseni. Değişim-farkında
-          tetikleme: yalnızca Dockerfile stage'liyken koşar (always_run
+          desenini Dockerfile'da ve npm çalışma alanlarında sözleşme
+          satırlarıyla sabitler: SECURITY_PATCH_PACKAGES CVE-defteri
+          default'u, --only-upgrade (tüm-upgrade yasağı), apt hijyeni,
+          dpkg-query kanıt satırı, bookworm dağıtım pini, pip floor deseni;
+          npm tarafında çalışma alanı başına `overrides` floor'ları + lock
+          uyumu + .dockerignore scratch envanteri. Değişim-farkında
+          tetikleme: Dockerfile, .dockerignore veya herhangi bir
+          package.json/package-lock.json stage'liyken koşar (always_run
           yok — nedensel sinyal korunur); desen bozulursa commit bloke.
-          Kapsam: (^|/)Dockerfile$ KÖK DIŞI Dockerfile'ları da eşler —
-          kapsam dışı Dockerfile sessizce eklenirse sözleşme onu
-          yakalamaz, bu yüzden süit keşif guard'ı fail-closed durur.
+          Kapsam: (^|/)(Dockerfile|\.dockerignore|package(-lock)?\.json)$
+          kök dışı yolları da eşler — kapsam dışı bir Dockerfile/çalışma
+          alanı sessizce eklenirse süit keşif guard'ı fail-closed durur.
           OFFLINE, stdlib-only, ~0.05s.
         entry: python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching
         language: system
-        files: (^|/)Dockerfile$
+        files: (^|/)(Dockerfile|\.dockerignore|package(-lock)?\.json)$
         pass_filenames: false
         stages: [pre-commit]
         verbose: true

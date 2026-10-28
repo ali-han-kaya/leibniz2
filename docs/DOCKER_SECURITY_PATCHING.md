@@ -49,13 +49,24 @@ zaman uygular*. İkisi karıştırılmamalıdır — biri dosya/içerik yüzeyi,
 | # | Kapı | Nerede tanımlı | Ne zaman koşar | Fail-closed kanıtı |
 |---|---|---|---|---|
 | 1 | **Smoke** — build + Trivy gate + canlı sağlık | CI: `docker-security.yml` → `smoke` job (`timeout-minutes: 30`). Yerel ikizi: `check-docker-security-smoke` (`bash _calisma/CIKTI/docker_security_smoke.sh`) | CI'da push + cron + `workflow_dispatch`; yerel ikiz yalnız `Dockerfile` stage'liyken | Kanıt dosyasında `verdict=PASS` yoksa `Assert real run` adımı `exit 1` — SKIP kanıt sayılmaz. Build/Trivy/sağlık hatasında script rc=1 |
-| 2 | **Patching** — yama-desen sözleşmesi | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: (^|/)Dockerfile$`, `pass_filenames: false`) | Herhangi bir yolda `Dockerfile` stage'liyken (`always_run` yok — nedensel sinyal korunur) | Sözleşme satırı bozulursa test fail → commit blok. Kapsam dışı Dockerfile varsa `test_no_uncovered_dockerfile` da fail eder. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
+| 2 | **Patching** — yama-desen sözleşmesi | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: (^\|/)(Dockerfile\|\.dockerignore\|package(-lock)?\.json)$`, `pass_filenames: false`) | Herhangi bir yolda `Dockerfile`, `.dockerignore` ya da bir `package.json`/`package-lock.json` stage'liyken (`always_run` yok — nedensel sinyal korunur) | Sözleşme satırı bozulursa test fail → commit blok. Kapsam dışı Dockerfile varsa `test_no_uncovered_dockerfile` da fail eder. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
 | 3 | **Cron** — zamanlanmış tazeleme | `docker-security.yml` → `on.schedule: "43 3 * * 1"` | Pazartesi 03:43 UTC, push tetiklemesi olmadan | Hazırlıksız çıkan CVE'yi yakalar; koşum kaydına yazılır, sapma tablosu yönlendirir |
+| 4 | **npm audit** — bağımlılık advisory eşiği | CI: `docker-security.yml` → `npm-audit` job; araç `_calisma/CIKTI/npm_audit_gate.py`. Eşik **tek kaynak**: workflow env `NPM_AUDIT_GATE_LEVEL` (bugün `high`) | CI'da push + PR + cron + `workflow_dispatch` | Eşiğe eşit/ağır bulguda script `exit 1`. `--require-real` ölçülemeyen koşumu (SKIP) de kırmızıya çevirir — sessiz yeşil yok |
 
-Kapı 1 ve 2 **yerelde**, kapı 3 **uzakta** koşar; üçü de aynı yüzeye bakar
-(`Dockerfile` + smoke scripti) ve üçü de sessiz geçişe kapalıdır: 1 ve 2
-sıfır-dışı çıkışla commit'i bloklar, 3 ise kanıtı boş bırakmaz — ilk
-Pazartesi koşumu gelene kadar `schedule` satırı boş kalır.
+Kapı 1 ve 2 **yerelde** (pre-commit), kapı 3 ve 4 **uzakta** (CI) koşar.
+Kapı 1-3 aynı yüzeye bakar (`Dockerfile` + smoke scripti); kapı 4 farklı bir
+yüzeye — lockfile'daki **çözülmüş npm ağacına** — bakar, çünkü image'e
+`node_modules` kurulmaz. Dördü de sessiz geçişe kapalıdır: 1 ve 2 sıfır-dışı
+çıkışla commit'i bloklar, 4 kırmızı bir CI job'ı üretir, 3 ise kanıtı boş
+bırakmaz — ilk Pazartesi koşumu gelene kadar `schedule` satırı boş kalır.
+
+**"Zorlayıcı" ne demek (dar tanım).** Kapı 3 ve 4'ün blokaj gücü, mevcut
+Trivy gate'iyle aynı sınıftadır: job `exit 1` verir, koşum kırmızıdır, PR ve
+push görünürlüğünde kalır. Branch-protection'ın *required check* kümesi ise
+`verify.yml`'den türetilir (`status_checks.py`) — `docker-security.yml`
+job'ları o kümenin dışındadır. Kapı 4'ü required check yapmak ayrı bir
+sözleşme kararıdır (branch protection + türetim kaynağı), bu turda
+istenmedi; bugünkü blokaj "kırmızı koşum", merge-engeli değil.
 
 Kapı 1'in CI job'ı Trivy'yi `image-scan` işinin kullandığı
 `trivy-action@v0.35.0` varsayılanıyla **aynı sürümde** (`0.69.3`) ama
@@ -71,13 +82,16 @@ farklıdır**:
 | Kapı | `files:` | `pass_filenames` | Sonuç |
 |---|---|---|---|
 | `check-docker-security-smoke` | `Dockerfile` — kök değil, yolun herhangi bir yerinde eşleşir | belirtilmemiş (varsayılan) | Alt dizinde bir `Dockerfile` da tam build+scan'i tetikler |
-| `check-dockerfile-security-patching` | `(^|/)Dockerfile$` — kök **ve** kök altı | `false` | Herhangi bir yolda `Dockerfile` sözleşmeyi tetikler |
+| `check-dockerfile-security-patching` | `(^\|/)(Dockerfile\|\.dockerignore\|package(-lock)?\.json)$` — kök **ve** kök altı | `false` | Herhangi bir yolda `Dockerfile` **veya** npm yüzeyi (`.dockerignore`, `package.json`, `package-lock.json`) sözleşmeyi tetikler |
 
 **Boşluk (ölçüldü, kapandı).** Patching kapısı `^Dockerfile$` iken ikinci bir
 `Dockerfile` eklenmesi onu tamamen kapsam dışı bırakıyordu: ne hook
 ateşlenir ne sözleşme uygulanır. Bugün git-tracked Dockerfile sayısı 1,
 yani boşluk gizliydi; ikinci dosya eklendiği anda sessizce açılırdı. Desen
-`(^|/)Dockerfile$` yapıldı.
+`(^|/)Dockerfile$` yapıldı; 2026-10-28 genişlemesinde npm yüzeyleri de
+eklendi (`\.dockerignore` + `package(-lock)?\.json`) — aksi hâlde bir floor
+veya ignore satırı değişip de hook ateşlenmezse npm katmanı commit-anında
+hiç denetlenmezdi (sözleşme yalnız Dockerfile'a bakardı).
 
 Sözleşmenin **kendisi** iki stage'li bookworm pini beklediği için her
 Dockerfile'a körlemesine uygulanamaz (meşru bir tek-stage yardımcı image'ı
@@ -173,8 +187,8 @@ yanlış teşhistir (o commit'te kapı yine kırmızı kalır).
 
 | Durum | Alan | Örnek |
 |---|---|---|
-| Doğrudan bağımlılık | `dependencies` | `next`: floor **15.5.15** (GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3) — taban yükselince `^16.x` olabilir, floor geri gitmez |
-| Geçişli (transitive) bağımlılık | `overrides` | `postcss: ^8.5.18`, `sharp: ^0.35.4` |
+| Doğrudan bağımlılık | `dependencies` | `next`: floor **15.5.28** (GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3 + 2026-10-28 CRITICAL advisory'leri) — taban yükselince `^16.x` olabilir, floor geri gitmez |
+| Geçişli (transitive) bağımlılık | `overrides` | `postcss: ^8.5.18`, `sharp: ^0.35.5`, `source-map-js: ^1.2.2`, `undici: ^7.30.1`, `body-parser: ^2.3.1`, `fast-uri: ^3.1.9`, `zod: ^4.6.6`, `@modelcontextprotocol/sdk: ^1.31.1`, `hono: ^4.13.11`, `ip-address: ^10.7.4` |
 | Uygulanmış hâli (kanıt) | `package-lock.json` | `npm ci` CI'da aynı ağacı kurar |
 
 - **Lockfile commit'lenir ve kanıttır:** floor'un gerçekten uygulandığının
@@ -194,11 +208,84 @@ yanlış teşhistir (o commit'te kapı yine kırmızı kalır).
 
 | Paket | Advisory/CVE | Floor | Kanıt |
 |---|---|---|---|
-| next | GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3 | 15.5.15 | 2026-09-20 gerçek sürüm bulgusu (image'e girecek paket) → `dependencies` floor'u + lock; ikinci koşum `trivy_findings=0` (Clean), `verdict=PASS` |
+| next | GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3, GHSA-8h8q-6873-q5fj, GHSA-p293-qw3h-jr36, GHSA-2xp9-vwfh-vxw4, GHSA-2464-fhr4-w9xw | 15.5.28 | 2026-09-20 gerçek sürüm bulgusu (image'e girecek paket) → `dependencies` floor'u + lock; ikinci koşum `trivy_findings=0` (Clean), `verdict=PASS`. 2026-10-28: yeni advisory'ler 15.5.15'i **CRITICAL**'a düşürdü (30 GHSA, aralarında iki RCE) → floor 15.5.28 |
 | postcss | CVE-2026-45623, CVE-2026-73646 | `^8.5.18` (çözülen 8.5.28) | 2026-09-20 `.worktrees` sızıntısı (bayat lock 8.4.31) → `.dockerignore` `**/node_modules` + `overrides`; `npm audit` 0 bulgu |
-| sharp | GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c | `^0.35.4` | aynı koşum, aynı sınıf (bayat lock 0.34.5) |
+| sharp | GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w | `^0.35.5` | aynı koşum, aynı sınıf (bayat lock 0.34.5); 2026-10-28 librsvg CVE-2026-96889 → 0.35.5 |
+| source-map-js | GHSA-68fv-2mgg-jv7q | `^1.2.2` | 2026-10-28: 1.2.1 → 1.2.2 (event-loop DoS) |
+| undici | GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx | `^7.30.1` | 2026-10-28: next'in geçişli HTTP istemcisi; 7.30.0 → 7.30.1 |
+| body-parser | GHSA-27r3-jxmh-p828 | `^2.3.1` | 2026-10-28: sıkıştırılmış gövde sonrası trailing-byte DoS (2.3.1 çözüldü) |
+| zod | GHSA-mrhx-c7xc-m3w5 | `^4.6.6` | 2026-10-28: aşırı-büyük koleksiyon doğrulamasında bellek tükenmesi (`shadcn` dev-CLI ağacı) |
+| @modelcontextprotocol/sdk | GHSA-6qxp-vccf-f47h, GHSA-6prh-2h8m-c8cw | `^1.31.1` | 2026-10-28: OAuth kimlik sızıntısı + cross-origin redirect; `shadcn` dev-CLI'ın geçişlisi |
+| fast-uri | GHSA-w74x-v6f9-j3xg, GHSA-xhq7-xmqj-769h, GHSA-wjr9-j795-jxcr, GHSA-333x-w4r6-6crp | `^3.1.9` | 2026-10-28: URI şema/path/host karışıklığı (trend-db ile aynı sınıf) |
+| hono | GHSA-5r4p-p66f-jhc7 | `^4.13.11` | 2026-10-28: `serveStatic` çift decode → middleware bypass (4.13.14 çözüldü) |
+| ip-address | GHSA-rxp7-6hxx-x8q5 | `^10.7.4` | 2026-10-28: zone-id eşleşmesinde kuadratik zaman (10.7.5 çözüldü) |
 
 Yeni girdiler buraya ve `package.json`'ın `overrides` bloğuna eklenir.
+
+### Çalışma alanı envanteri (2026-10-28 genişlemesi)
+
+Sözleşme başlangıçta tek çalışma alanıyla (`apps/dashboard-next`) sınırlıydı.
+Diğer node yüzeyleri de image bağlamına giren manifestler taşıdığı için aynı
+iki yüzey (floor + hijyen) onlara da uygulandı. Ölçüm tek yönlüdür: her satır
+`npm audit --package-lock-only` çıktısındaki advisory'ye dayanır, floor'lar
+`npm install --package-lock-only` sonrası lock'ta doğrulanır.
+
+| Çalışma alanı | Floor'lar | Advisory | Ölçüm / durum |
+|---|---|---|---|
+| `apps/dashboard-next` | `next` 15.5.28 · `postcss` ^8.5.18 · `sharp` ^0.35.5 · `source-map-js` ^1.2.2 · `undici` ^7.30.1 · `body-parser` ^2.3.1 · `fast-uri` ^3.1.9 · `zod` ^4.6.6 · `@modelcontextprotocol/sdk` ^1.31.1 · `hono` ^4.13.11 · `ip-address` ^10.7.4 | GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3, GHSA-f88m-g3jw-g9cj, GHSA-8h8q-6873-q5fj, GHSA-wq5f-xc86-pv6w, GHSA-68fv-2mgg-jv7q, GHSA-4w7w-5xrc-9h26, GHSA-27r3-jxmh-p828, GHSA-w74x-v6f9-j3xg, GHSA-6qxp-vccf-f47h, GHSA-5r4p-p66f-jhc7 | 2026-10-28: zorlayıcı `npm audit` kapısı **ilk kez** ölçtü — 13 bulgu (1 CRITICAL, 7 HIGH, 4 MODERATE, 1 LOW) → eşik `high`'ta **0 bloklayan** (yalnız 2 LOW: `deepmerge`, `shadcn` dev-CLI). `npm ci` + `tsc --noEmit` + `next build` (7/7 sayfa) yeşil |
+| `apps/dashboard-shadcn` | `vite` ^8.3.5 · `source-map-js` ^1.2.2 | GHSA-68fv-2mgg-jv7q (source-map-js), GHSA-698v-4r3x-3vcv + 4 vite/launch-editor GHSA'sı | 2026-10-28: `vite` 8.2.2 + `source-map-js` 1.2.1 → floor; `npm run build` (`tsc -b && vite build`) geçti, `npm audit` 0 |
+| `apps/trend-db` | `prisma` / `@prisma/client` / `@prisma/adapter-pg` ^7.10.1 · `@prisma/config` ^7.10.1 · `deepmerge-ts` ^8.0.0 · `fast-uri` ^3.1.9 · `mysql2` ^3.23.1 | GHSA-ggr8-5vv4-36mx (deepmerge-ts), GHSA-3f6p-5ww8-9rcr (mysql2), GHSA-w74x-v6f9-j3xg (fast-uri) | 2026-10-28: 5 bulgu → 0; `prisma generate` + `tsc --noEmit` geçti (7.10.1 istemcisi üretildi) |
+| `_calisma/pptx` | `image-size` ^2.0.3 | GHSA-5p2g-fcmc-qvqq (JXL/HEIF), GHSA-w3rx-r6r6-pgpr (ICNS) | 2026-10-28: floor uygulandı (pptxgenjs 4.0.1 → `image-size` ^1.2.1). `image-size` **runtime'da yüklenmiyor**: pptxgenjs dist'i yalnız `jszip` + `sizeof` require eder, ölçüldü (`require.cache` boş) → override sürüm tablosunu kapatır, davranış değişmez |
+| `_calisma/docx` | (floor yok — `docx` 9.7.2 pin) | — | main'de **yok**: yalnız land edilmemiş dallarda (`fix/branch-red-jobs`, #54 soyu). Bugünkü ölçüm: `npm audit` 0 bulgu. Dal land ettiği gün (package.json göründüğü an) kayıt otomatik devreye girer |
+
+**Kapsam dışı (gerekçeli):** `_calisma/video` — Remotion 4.0.530
+advisory'lerinin yamalı sürümü yok; `npm audit`'in tek "fix"i 4.0.277'ye
+**downgrade** öneriyor (`isSemVerMajor`). Floor yazılamaz, downgrade video
+üretimini bozar. Kayıt süitteki `NPM_OUT_OF_SCOPE` içinde; gerekçesiz kayıt
+FAIL eder. Remotion yamalı sürüm yayımladığında yeniden ölçülecek.
+
+Bu turda sözleşmeye giren yeni kurallar:
+
+6. **`latest` bir floor değildir.** `"latest"` / `"*"` / `"x"` aralıkları
+   sürüm kararını registry'ye devreder: lock bir sürüme çözülür ama
+   denetlenecek taban yoktur. dashboard-shadcn'ın altı `latest` girdisi
+   ölçülen (lock'taki) sürümlerinin `^` floor'una çevrildi — `npm ci` aynı
+   ağacı kurar, floor artık yazılı ve denetlenebilir.
+7. **Scratch yüzeyi çalışma alanı başına beyan edilir.** Bu turda eklenen
+   `.dockerignore` satırları: `**/dist`, `**/.vite`, `**/tsconfig.tsbuildinfo`,
+   `**/*.pptx`, `apps/trend-db/generated`. Hepsi üretim artefaktı (git'te
+   izlenmiyor: `git ls-files | grep -E '/dist/|/generated/'` → 0 satır). Bare
+   `dist` yalnız kökte eşleşirdi; js build çıktısı derinlikte doğar
+   (`apps/dashboard-shadcn/dist`, `_calisma/video/dist`).
+8. **Kapsam keşfi fail-closed.** `repo_npm_workspaces()` repodaki her
+   `package.json` dizinini bulur; kayıtlı olmayan ve gerekçeli kapsam-dışı
+   listesinde yer almayan bir çalışma alanı varsa süit FAIL eder — yeni bir
+   node yüzeyi sessizce kapsam dışı kalamaz (Dockerfile keşfiyle aynı desen).
+
+### Zorlayıcı npm audit eşik kapısı (2026-10-28)
+
+Floor'lar bir *desen* sözleşmesidir: `overrides` silinirse test düşer, ama
+yeni bir advisory floor'ları güncelleyene kadar süit yeşil kalabilir — çünkü
+offline test `npm audit` çalıştırmaz. Kırmızıyı üreten şey kapının kendisidir:
+`npm-audit` job'ı, `npm_audit_gate.py`, eşik `NPM_AUDIT_GATE_LEVEL`.
+
+| Soru | Cevap |
+|---|---|
+| Nereye bakar? | `npm_workspaces.present_workspaces()` — floor sözleşmesiyle **aynı kayıt** (tek kaynak). Yeni bir çalışma alanı eklendiğinde ikisi birlikte genişler |
+| Nasıl ölçer? | `npm audit --package-lock-only --json --audit-level=<eşik>`; `node_modules` kurulmaz, lockfile'daki çözülmüş ağaç denetlenir |
+| Eşik nerede? | Workflow `env: NPM_AUDIT_GATE_LEVEL` (**tek literal**). Script aynı env'i okur; CLI `--level` yalnız yerel/probe için. Adımda literal `--level` yasak (test pinler) |
+| Hangi seviye bloklar? | `high` (varsayılan) → CRITICAL + HIGH. `critical` → yalnız CRITICAL. `moderate` / `low` → daha geniş |
+| Ölçüm yapılamazsa? | SKIP: kanıt satırı `verdict=SKIP` yazar, çıkış 0. CI'da `--require-real` verildiği için SKIP **FAIL**'dir (npm kurulu bir runner'da SKIP = kapı körleşti) |
+| Kanıt? | `docs/ci_simulate/npm_audit/npm_audit_report.txt` — çalışma alanı başına tek satır + son `verdict=` satırı; job log'unda da görünür (`if: always()`) |
+| Yerel koşum? | `python3 _calisma/CIKTI/npm_audit_gate.py` (registry'deki her mevcut alan). Pre-commit'e **bilinçli olarak** bağlanmadı: hook ağ/registry gerektirir, offline commit'i bloklamamalı |
+
+Kapsam-dışı bırakılan tek yüzey `_calisma/video`'dur (gerekçe yukarıda:
+Remotion için yamalı sürüm yok) — gate onu taramaz, süit gerekçesiz kaydı
+zaten FAIL eder. Yeni bir CVE düştüğünde akış: gate kırmızı → advisory
+ölçülür → `package.json` `overrides`/`dependencies` floor'u → `npm install
+--package-lock-only` → süit + gate yeşil. Gate hiçbir şeyi **otomatik
+düzeltmez**; `npm audit fix --force` bilinçli olarak çağrılmaz (major
+downgrade riski).
 
 ## Haftalık cron koşumu — ilk Pazartesi doğrulama (runbook)
 
@@ -451,7 +538,12 @@ bookworm dağıtım pini ve pip floor deseni (`--upgrade "pkg>=x"` + asla
 context hijyeni (`.dockerignore`'da `**/node_modules`, `**/.next`, `.worktrees`
 — bare ad tuzağı dahil), `overrides` floor'ları (`^`, asla `=`) + `next`
 doğrudan floor'u, lockfile'ın floor'ları karşıladığı (`floor → lock` uyumu) ve
-npm bölümünün doküman sözleşmesi. Süit manifest'te olduğu için
+npm bölümünün doküman sözleşmesi. 2026-10-28 genişlemesinde süit **çalışma
+alanı kayıt defteriyle** (`NPM_WORKSPACES`) çalışır: her alan için floor →
+lock uyumu, `latest` yasağı, scratch envanteri (.dockerignore'da tam satır),
+gitignore paritesi ve hook `files:` deseni paritesi ayrı ayrı sınanır;
+kayıtsız bir `package.json` keşif guard'ını düşürür (`NPM_OUT_OF_SCOPE`
+gerekçesi zorunlu). Süit manifest'te olduğu için
 `check-unit-tests` her commit'te koşar: yüzeylerden biri sessizce bozulursa
 commit bloklanır. Desenin bozulması (ör. floor'un silinmesi, tüm-upgrade'e
 geçilmesi, `**/node_modules`'in bare'a düşmesi) testi fail yapar → commit

@@ -28,6 +28,19 @@ package-lock.json
 **/node_modules
 **/.next
 
+# Node çalışma alanı BUILD ÇIKTILARI (kaynak-değil; image'a girmemeli).
+# Bare ad kuralının devamı: `dist` yalnız kökte eşleşir, oysa js build
+# çıktısı her çalışma alanında derinlikte doğar (apps/dashboard-shadcn/dist,
+# _calisma/video/dist). Aynı sınıf: bu dizinler imaja girerse Trivy, üreten
+# node sürümünü kaynak sanıp tarar (2026-09-20 sızıntısının kardeşi).
+**/dist
+**/.vite
+**/tsconfig.tsbuildinfo
+# Deck/video üretim çıktıları (gitignore'lu; image'a girecek bir şey değil).
+**/*.pptx
+# prisma client üretimi (npm run db:generate) — kaynak ağacı değil.
+apps/trend-db/generated
+
 # Editor / OS
 .DS_Store
 .idea

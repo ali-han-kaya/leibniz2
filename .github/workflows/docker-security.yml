@@ -37,6 +37,10 @@ env:
   # yama katmanını sessizce kapatırdı: empty-guard "yama yok" derdi).
   PATCH_ARG_APT_OVERRIDE: ${{ github.event.inputs.security_patch_packages || vars.SECURITY_PATCH_PACKAGES }}
   PATCH_ARG_PY_OVERRIDE: ${{ github.event.inputs.python_security_patch_packages || vars.PYTHON_SECURITY_PATCH_PACKAGES }}
+  # npm audit eşiği (TEK kaynak): hem scriptin varsayılanı hem adımın env'i
+  # bu değeri okur. Eşiği ikinci bir yerde literal yazmak, sürüklenen bir
+  # "hangi seviye bloklar" kararı üretir.
+  NPM_AUDIT_GATE_LEVEL: "high"
 
 concurrency:
   # CI-hijyen: aynı PR'a ardışık push'lar eski taramayı iptal eder.
@@ -209,3 +213,40 @@ jobs:
         run: |
           cat docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt 2>/dev/null \
             || echo "(smoke kanıt dosyası yok — SKIP koşumunda üretilmez)"
+
+  # ── npm audit kapısı (zorlayıcı) ────────────────────────────────────────
+  # Trivy image katmanını tarar; npm katmanı ise lockfile'daki ÇÖZÜLMÜŞ ağaç
+  # üzerinden advisory eşiğine vurulur. İkisi ayrı job: biri kırmızıya
+  # düştüğünde diğerinin kanıtı kaybolmaz (job'lar birbirine bağımlı değil).
+  npm-audit:
+    name: npm audit gate (Node workspaces)
+    runs-on: ubuntu-latest
+    # node_modules kurulmaz (audit lockfile'a bakar); 10 dk registry + audit
+    # endpoint'i için bolca yeterli, asılı kalan bir koşum job'u kilitlemez.
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      # Zorlayıcı kapı: eşik workflow env'inden (NPM_AUDIT_GATE_LEVEL) gelir —
+      # script aynı env'i okur, adımda literal seviye argümanı YOK.
+      # --require-real: CI'da npm kurulu olduğu için SKIP (registry'ye
+      # ulaşılamadı vb.) kanıt değildir; kapı kırmızıya döner.
+      - name: Run npm audit gate (fail-closed)
+        run: |
+          set -euo pipefail
+          python3 _calisma/CIKTI/npm_audit_gate.py --require-real \
+            --report docs/ci_simulate/npm_audit/npm_audit_report.txt
+
+      - name: Show npm audit evidence
+        if: always()
+        run: |
+          cat docs/ci_simulate/npm_audit/npm_audit_report.txt 2>/dev/null \
+            || echo "(npm audit kanıt dosyası yok — erken çıkış)"

@@ -5,6 +5,7 @@
   "description": "Dogrulama-zinciri trend gecmisinin Postgres (Neon) katmani — prisma-database-setup skill'i",
   "scripts": {
     "load": "tsx scripts/load.ts",
+    "test": "node test/run.mjs",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
@@ -12,15 +13,21 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "dotenv": "^18.0.0",
     "pg": "^8.23.0",
     "tsx": "^4.23.13"
   },
   "devDependencies": {
     "@types/node": "^24.7.0",
-    "prisma": "^7.10.0",
+    "prisma": "^7.10.1",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "@prisma/config": "^7.10.1",
+    "deepmerge-ts": "^8.0.0",
+    "fast-uri": "^3.1.9",
+    "mysql2": "^3.23.1"
   }
 }
