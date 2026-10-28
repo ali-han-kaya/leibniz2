@@ -63,6 +63,20 @@ kendisi kurar (URL + sürüm + sha256 üçü de pin'li). İki iş böylece farkl
 motorlarla değil aynı motorla döner; ayrıntı "Motor paritesi — ölçülmüş"
 bölümündedir.
 
+### PR yorumu — eşik girdisi tek kaynaktan
+
+`image-scan` job'ı PR'larda Trivy SARIF'ini PR-diff yorumuna çevirir
+(`_calisma/CIKTI/github_scripts/trivy_sarif_pr_comment.js`, marker
+`<!-- trivy-sarif-pr-comment -->`). Kapı parametreleri (`severity`,
+`ignore-unfixed`) job env'inde **tek kez** tanımlıdır (`TRIVY_SEVERITY`,
+`TRIVY_IGNORE_UNFIXED`); hem zorlayıcı tarama adımlarının
+`severity`/`ignore-unfixed` girdileri hem yorum adımının env'i aynı
+değerlerden beslenir. Script eşiği **varsaymaz**: env yok veya geçersizse
+fail-closed kırmızı (yorum da düşmez), bloklayan seviye kümesi env'den türer
+(eşik MEDIUM'a genişletilirse MEDIUM de bloklar) ve seviyesi okunamayan
+sonuç `UNKNOWN` etiketiyle bloklanır — eskiden olduğu gibi `HIGH` diye
+**uydurulmaz**.
+
 ### Tetikleme yüzeyleri: ölçülen asimetri ve kapandığı
 
 İki pre-commit kapısı aynı dosyaya bakar ama **eşleşme kalıpları
@@ -453,4 +467,12 @@ npm bölümünün doküman sözleşmesi. Süit manifest'te olduğu için
 commit bloklanır. Desenin bozulması (ör. floor'un silinmesi, tüm-upgrade'e
 geçilmesi, `**/node_modules`'in bare'a düşmesi) testi fail yapar → commit
 bloke olur.
+
+PR yorum gate'inin girdi bağı da sabitlidir. `test_gate_scripts_meta_guard`
+(`TestGateEnvWiring`) workflow'daki tek-kaynak env tanımını, iki tarama
+adımının `severity`/`ignore-unfixed` girdilerini, yorum adımının env
+geçişini ve script'in o env adlarını okuduğunu birlikte doğrular;
+`github_scripts_battery` senaryoları davranışı `mock_env.json` ile açar
+(kapı MEDIUM içeriyor → MEDIUM bloklar; seviye-okunamadı → `UNKNOWN` +
+fail-closed; env yok → yorum yok).
 
