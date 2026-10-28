@@ -198,6 +198,51 @@ jobs:
           python3 -m unittest discover -s docs/branch-protection-guide \
             -p "test_render_screens.py" -v 2>&1 | tee -a unit_tests.log
 
+      # ─── FULL-DISCOVER DRIFT GUARD (FAIL-CLOSED, ayrı step) ─────────────
+      # check-unit-tests hook'u YALNIZ kayıtlı dosyaları koşar; bir test
+      # dosyası diske commit edilip listeye/HOOK_COVERAGE'a eklenmezse o
+      # dosyanın kırmızısı yerel geri bildirimde hiç görünmez. Yukarıdaki
+      # "Run CIKTI unit tests" adımı tam discover'ı fail-closed koşturur; bu
+      # adım ayrıca "kayıtlı batarya YEŞİL ama tam discover KIRMIZI" koşulunu
+      # (drift) ölçer, kayıt paritesini (diskte olup kayıtlı olmayan /
+      # kayıtlı olup diskte olmayan) raporlar ve makine-okur JSON sidecar
+      # üretir. Sidecar `logs/` altına yazılır → precommit-logs artifact'ı
+      # dizini bütünüyle yükler.
+      # Gate fail-closed'dır: drift varsa exit 1 → job düşer. `set +e` yalnız
+      # exit kodunu ve kanıt dosyalarını yazmak içindir; kararı `exit $status`
+      # verir (kanıt yazımı kararı yutamaz).
+      #
+      # YER SÖZLEŞMESİ (ölçüldü): adım birim test adımının HEMEN ARDINDA ve
+      # "Run full verification" öncesinde koşmalı. K1-K19 / pre-commit
+      # adımları workspace'e sidecar yazar (logs/, verify_report.txt,
+      # reproducibility/); gate o kirli ağaçta koşunca kayıtlı batarya
+      # 195/196'ya düşüp tam discover kırmızı verdi (ilk CI koşumu, run
+      # 40686255486) — aynı komutlar temiz ağaçta yeşildi. Ölçüm, CI'ın
+      # birim test adımıyla aynı ağaç durumunda yapılmalı.
+      - name: Full-discover drift guard (fail-closed)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p logs
+          set +e
+          python3 _calisma/CIKTI/ci_full_discover_drift_guard.py \
+            --json-out logs/full_discover_drift_guard.json \
+            > logs/full_discover_drift_guard.log 2>&1
+          status=$?
+          set -e
+          echo "$status" > logs/full_discover_drift_guard.exit
+          {
+            echo ""
+            echo "════════════════════════════════════════════════════════"
+            echo "FULL-DISCOVER DRIFT GUARD (FAIL-CLOSED, ayrı step)"
+            echo "exit code: $status"
+            echo "════════════════════════════════════════════════════════"
+            cat logs/full_discover_drift_guard.log
+          } >> verify_report.txt
+          cat logs/full_discover_drift_guard.log
+          exit $status
+
+
       # Birim test çıktısı ayrı 'unit-tests' artifact'ına yazılır. Kapı
       # fail-closed'dur (test düşerse job kırılır); if: always() sayesinde
       # log başarısızlıkta da yüklenir → düşen testin nedeni görünür.
@@ -617,41 +662,6 @@ jobs:
           cat logs/check_unit_tests.log
           exit $status
 
-      # ─── FULL-DISCOVER DRIFT GUARD (FAIL-CLOSED, ayrı step) ─────────────
-      # check-unit-tests hook'u YALNIZ kayıtlı dosyaları koşar; bir test
-      # dosyası diske commit edilip listeye/HOOK_COVERAGE'a eklenmezse o
-      # dosyanın kırmızısı yerel geri bildirimde hiç görünmez. Yukarıdaki
-      # "Run CIKTI unit tests" adımı tam discover'ı fail-closed koşturur; bu
-      # adım ayrıca "kayıtlı batarya YEŞİL ama tam discover KIRMIZI" koşulunu
-      # (drift) ölçer, kayıt paritesini (diskte olup kayıtlı olmayan /
-      # kayıtlı olup diskte olmayan) raporlar ve makine-okur JSON sidecar
-      # üretir. Sidecar `logs/` altına yazılır → precommit-logs artifact'ı
-      # dizini bütünüyle yükler.
-      # Gate fail-closed'dır: drift varsa exit 1 → job düşer. `set +e` yalnız
-      # exit kodunu ve kanıt dosyalarını yazmak içindir; kararı `exit $status`
-      # verir (kanıt yazımı kararı yutamaz).
-      - name: Full-discover drift guard (fail-closed)
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p logs
-          set +e
-          python3 _calisma/CIKTI/ci_full_discover_drift_guard.py \
-            --json-out logs/full_discover_drift_guard.json \
-            > logs/full_discover_drift_guard.log 2>&1
-          status=$?
-          set -e
-          echo "$status" > logs/full_discover_drift_guard.exit
-          {
-            echo ""
-            echo "════════════════════════════════════════════════════════"
-            echo "FULL-DISCOVER DRIFT GUARD (FAIL-CLOSED, ayrı step)"
-            echo "exit code: $status"
-            echo "════════════════════════════════════════════════════════"
-            cat logs/full_discover_drift_guard.log
-          } >> verify_report.txt
-          cat logs/full_discover_drift_guard.log
-          exit $status
 
       # ─── COMMIT-MSG (ADVISORY) — commit geçmişi kural denetimi ──────────
       # commit_msg_hook.sh yerelde `git commit`'i BLOKE eder; CI'da zaten push

@@ -79,6 +79,26 @@ class TestWiring(unittest.TestCase):
         # `set +e` yalnız exit kodunu yakalamak için; kararı `exit` verir.
         self.assertIn("status=$?", run)
 
+    def test_step_runs_on_clean_tree(self):
+        """Yer sözleşmesi: birim test adımının hemen ardından, K1-K19 öncesi.
+
+        Ölçüldü (run 40686255486): adım K1-K19/pre-commit sidecar'ları
+        yazıldıktan sonra koşunca aynı komutlar temiz ağaçtaki sonucu
+        vermedi — kayıtlı batarya 195/196, discover kırmızı.
+        """
+        steps = _verify_steps()
+        names = [s.get("name") or s.get("uses") for s in steps]
+        guard_i = next(i for i, s in enumerate(steps)
+                       if "ci_full_discover_drift_guard.py" in (s.get("run") or ""))
+        unit_i = names.index("Run CIKTI unit tests (test_*.py)")
+        full_i = names.index("Run full verification (K1-K19, single entry point)")
+        self.assertGreater(guard_i, unit_i,
+                           "guard birim test adımından ÖNCE koşuyor — çift discover "
+                           "ve karşılaştırılamaz kanıt")
+        self.assertLess(guard_i, full_i,
+                        "guard, K1-K19/pre-commit sidecar yazımından SONRA koşuyor — "
+                        "kirli ağaçta ölçüm yanlış (195/196 + discover kırmızı)")
+
     def test_step_emits_evidence_sidecars(self):
         run = _guard_steps()[0]["run"]
         self.assertIn("--json-out logs/", run,
