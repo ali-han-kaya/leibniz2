@@ -692,6 +692,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-28 | fix | (ci) stop reporting MEDIUM/LOW Trivy findings as HIGH blockers (#156) | [`e6ad9dd`](https://github.com/ali-han-kaya/leibniz2/commit/e6ad9dd) |
 | 2026-10-28 | docs | (deploy) kanit satiri e6ad9dd1 (trivy seviye duzeltmesi) (#158) | [`790cb7f`](https://github.com/ali-han-kaya/leibniz2/commit/790cb7f) |
 | 2026-10-29 | test | (battery) parallel runner, vacuous classifier, keyboard E2E (#160) | [`68b6239`](https://github.com/ali-han-kaya/leibniz2/commit/68b6239) |
+| 2026-10-29 | feat | (delivery) ledger-bound repack sidecar + reconciliation docs (#163) | [`f5d84fc`](https://github.com/ali-han-kaya/leibniz2/commit/f5d84fc) |
+| 2026-10-29 | feat | (ci) scoped protection token, sidecar gate, honest doc counts (#161) | [`2d022e0`](https://github.com/ali-han-kaya/leibniz2/commit/2d022e0) |
 
 ### Regresyon notları
 
