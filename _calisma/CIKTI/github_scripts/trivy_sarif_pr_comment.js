@@ -184,13 +184,19 @@ try {
   let body = MARKER + '\n## 🛡️ Trivy tarama raporu (docker-security)\n\n';
   if (!blocking.length) {
     body +=
-      '✅ **' + sevLabel + ' bulgu yok** — Trivy temiz ' +
-      '(' + gateDesc + ').\n';
+      '✅ **' +
+      sevLabel +
+      ' bulgu yok** — Trivy temiz ' +
+      '(' +
+      gateDesc +
+      ').\n';
   } else {
     body +=
       '**' +
       blocking.length +
-      '** ' + sevLabel + ' bulgu ' +
+      '** ' +
+      sevLabel +
+      ' bulgu ' +
       '(diff-içi: ' +
       inDiff.length +
       ')\n\n';
@@ -218,7 +224,9 @@ try {
         ' sonuç).\n';
     }
     body +=
-      '\nKapı: ' + gateDesc + ' → gate kırmızı. ' +
+      '\nKapı: ' +
+      gateDesc +
+      ' → gate kırmızı. ' +
       'Çözüm: yamalı base-image / pkg yükseltmesi (DOCKER_SECURITY_PATCHING.md).\n';
   }
 
@@ -232,13 +240,13 @@ try {
     core.setFailed(
       'Trivy: ' +
         blocking.length +
-        ' ' + sevLabel + ' bulgu ' +
+        ' ' +
+        sevLabel +
+        ' bulgu ' +
         '(diff-içi: ' +
         inDiff.length +
         ') — gate kırmızı' +
-        (unknown.length
-          ? ' (seviye-okunamadı: ' + unknown.length + ')'
-          : '')
+        (unknown.length ? ' (seviye-okunamadı: ' + unknown.length + ')' : '')
     );
   } else {
     console.log('Trivy temiz — ' + sevLabel + ' bulgu yok');
