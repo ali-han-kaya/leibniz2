@@ -694,6 +694,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-29 | test | (battery) parallel runner, vacuous classifier, keyboard E2E (#160) | [`68b6239`](https://github.com/ali-han-kaya/leibniz2/commit/68b6239) |
 | 2026-10-29 | feat | (delivery) ledger-bound repack sidecar + reconciliation docs (#163) | [`f5d84fc`](https://github.com/ali-han-kaya/leibniz2/commit/f5d84fc) |
 | 2026-10-29 | feat | (ci) scoped protection token, sidecar gate, honest doc counts (#161) | [`2d022e0`](https://github.com/ali-han-kaya/leibniz2/commit/2d022e0) |
+| 2026-10-29 | docs | (deploy) kanit satiri f5d84fc5 (teslim PR #163) (#166) | [`163991a`](https://github.com/ali-han-kaya/leibniz2/commit/163991a) |
 
 ### Regresyon notları
 
