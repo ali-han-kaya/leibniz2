@@ -1,13 +1,23 @@
 ---
 name: reproducible-pdf-build
-description: "Make LaTeX/PDF builds reproducible: metadata-stripped SHA-256 sidecars, qpdf non-determinism detection, SOURCE_DATE_EPOCH migration, and fail-closed CI gates. Use when PDF build artifacts keep changing hash between runs, when a delivery pipeline needs byte-identical rebuilds, or when auditing whether a PDF was rebuilt from known sources."
+description: 'Make LaTeX/PDF builds reproducible: metadata-stripped SHA-256 sidecars, qpdf non-determinism detection, SOURCE_DATE_EPOCH migration, and fail-closed CI gates. Use when PDF build artifacts keep changing hash between runs, when a delivery pipeline needs byte-identical rebuilds, or when auditing whether a PDF was rebuilt from known sources.'
 metadata:
   openclaw:
-    emoji: "🔁"
-    category: "research"
-    subcategory: "reproducibility"
-    keywords: ["PDF reproducibility", "deterministic build", "SOURCE_DATE_EPOCH", "qpdf", "metadata-stripped hash", "byte-identical repack", "tectonic", "TeXLive"]
-    source: "leibniz2"
+    emoji: '🔁'
+    category: 'research'
+    subcategory: 'reproducibility'
+    keywords:
+      [
+        'PDF reproducibility',
+        'deterministic build',
+        'SOURCE_DATE_EPOCH',
+        'qpdf',
+        'metadata-stripped hash',
+        'byte-identical repack',
+        'tectonic',
+        'TeXLive',
+      ]
+    source: 'leibniz2'
 ---
 
 # Reproducible PDF Build
@@ -17,19 +27,15 @@ metadata:
 Academic/engineering deliveries ship a PDF built from `.tex`. To prove the
 artifact came from known sources and that a rebuild is trustworthy, you need
 **build determinism**: the same inputs must produce the same bytes (or a
-provable proxy of it). This skill distills a real production lesson: two
-independent non-determinism sources were found and handled with a
-**metadata-stripped SHA-256 sidecar** pattern plus **fail-closed gates**,
-while the principled fix (`SOURCE_DATE_EPOCH`) was documented as the future
-migration.
-
-**Status update — that migration is now COMPLETED** in the repo this skill
-came from (leibniz2): the build runs TeXLive + `SOURCE_DATE_EPOCH` +
-`TEXMFOUTPUT`, and the strict gate compares the **`/ID`-canonical** hash
-against a written acceptance ledger
-(`docs/ID_RESIDUAL_ACCEPTANCE.md`), fail-closed, ON by default. The measured
-ledger — including the platform-specific canonical hashes — is the reference;
-read it instead of re-deriving the numbers.
+provable proxy of it). This skill distills a real production lesson: the
+first diagnosis — "the engine is non-deterministic" — was **wrong**, and the
+measurement that refuted it is what makes the fix trustworthy. Three drift
+sources were actually measured, each handled by a different layer: a driver
+that never exported `SOURCE_DATE_EPOCH` to the engine (fixed at the harness),
+pdfTeX's per-run trailer `/ID` (neutralized in a canonical hash), and
+`qpdf --remove-metadata` (unstable by design — contained by sidecar reuse).
+The layers that keep a repack byte-identical are the **metadata-stripped
+SHA-256 sidecar** and **fail-closed gates** pinned to an acceptance ledger.
 
 The lesson applies to any pipeline where a PDF (or other generated artifact)
 enters a signed/delivered bundle:
@@ -46,29 +52,29 @@ enters a signed/delivered bundle:
   to explain/contain it.
 - You want a CI check that proves "the shipped PDF matches the checked-in
   sources" without recompiling in CI.
-- You are migrating from a non-deterministic engine (e.g. tectonic) to
-  TeXLive + `SOURCE_DATE_EPOCH` and want a verification strategy on both sides.
+- You are migrating between engines (e.g. tectonic → TeXLive +
+  `SOURCE_DATE_EPOCH`) and want a verification strategy on both sides — the
+  canonical hash is **not** expected to match across engines (measured:
+  `d4f67e39…` tectonic-era vs `659733d5…` pdfTeX; font embedding/producer
+  differ).
 - You need a bundle hash that is stable across repacks even when the raw PDF
   is not reproducible.
 
-## Background: Why PDFs Are Non-Deterministic
+## Background: Why PDFs Drift Between Runs
 
-Two independent sources of byte drift were found in the field:
+Three sources of byte drift were measured in the field. The one everybody
+blames first turned out not to be the engine.
 
-### 1. Compiler-level (the `/ID` trailer)
+### 1. Harness-level: `SOURCE_DATE_EPOCH` never reached the engine
 
-**Measured correction — the earlier claim in this skill is superseded.** This
-skill originally attributed engine-level non-determinism to `tectonic`
-("consecutive builds produce different byte streams"). Measurement refuted
-that: `tectonic` 0.17.0 was **byte-stable** in the audited runs — its raw
-hash already equals its canonical hash, and it is the *same* across two
-different platforms.
-
-The real compiler-level residue is **pdfTeX's random trailer `/ID`**: every
-run writes a fresh 64-byte `/ID`, `SOURCE_DATE_EPOCH=0` included. The single
-byte-level difference between two runs of the same source is that pair. This
-is exactly what the `/ID`-canonical hash neutralises, and why the strict gate
-must sit on the canonical hash rather than on raw bytes.
+The first diagnosis was "tectonic is not byte-deterministic". Measurement
+refuted it: the same manuscript hashed `4ad65b9b…` in one session and
+`6cfc6c0a…` in the next because the build driver exported
+`SOURCE_DATE_EPOCH` to `pdflatex` only — `tectonic` never saw it and fell
+back to embedding the current time. After the export was fixed, tectonic
+0.17.0 produced `ad8fca69…` — byte-identical across contexts (33-page
+manuscript, SDE=0; raw = canonical, no `/ID` residue). Before blaming an
+engine, prove the environment reaches it.
 
 ### 2. Post-processing (qpdf --remove-metadata)
 
@@ -85,6 +91,15 @@ raw PDF  e7b0bc0b…
 
 So even "strip volatile metadata then hash" is not a stable proxy if you
 recompute it freely.
+
+### 3. Engine trailer (`/ID`, pdfTeX)
+
+With SDE exported, `pdflatex` still writes a fresh random 64-byte trailer
+`/ID` on every run — SDE=0 included. Measured: two independent runs of the
+same source differ in that line only; neutralizing the `/ID` pair to zeros
+makes the hash identical (`a75c3409…` 1-pass, `544516b0…` 3-pass, each
+stable across independent runs). This is why the strict gate compares a
+`/ID`-canonical hash instead of raw bytes.
 
 ## The Pattern: Metadata-Stripped SHA-256 Sidecar
 
@@ -176,12 +191,12 @@ exactly the signal you want.
 - Gate on: raw hash sidecar match (P0), manifest integrity, and — for
   build-specific claims — the frozen experiment record.
 - Report drift as informational when it is expected (P0/P1 only when the
-  *stable* proxy breaks, not when raw bytes drift).
+  _stable_ proxy breaks, not when raw bytes drift).
 
-### Step 5 — Document the migration path (COMPLETED in leibniz2)
+### Step 5 — Document the migration path
 
-The principled fix for engine-level non-determinism is a deterministic
-toolchain:
+The principled fix for the drift that survives the harness fix is a
+deterministic toolchain:
 
 ```bash
 # TeXLive + SOURCE_DATE_EPOCH (the documented target)
@@ -197,7 +212,7 @@ Notes from the field:
   64-byte trailer `/ID` on every run, SDE=0 included (measured; the single
   byte-level difference between two runs of the same source). So SDE alone
   does **not** remove the need for normalization — it removes the need for
-  *dates* to be part of the comparison.
+  _dates_ to be part of the comparison.
 - The supported strict comparison is therefore the **`/ID`-canonical**
   hash (normalize `/ID [<a…> <b…>]` → zero pair, then SHA-256), pinned to
   an acceptance ledger. In this repo that gate is **ON by default**; the
@@ -205,8 +220,11 @@ Notes from the field:
 - Do **not** put a strict gate back on the qpdf-metadata-stripped hash:
   `qpdf --remove-metadata` is itself non-deterministic — one input PDF,
   three runs, three hashes (`2042ba8b…` / `7f9125d0…` / `c9b9890d…`).
-- `tectonic` does not honor `SOURCE_DATE_EPOCH` the same way; the migration
-  path remains TeXLive + `SOURCE_DATE_EPOCH`.
+- Engines differ in _what_ has to be normalized, not in whether determinism
+  is achievable: tectonic 0.17.0 with SDE exported was byte-stable
+  (`ad8fca69…`, raw = canonical), while pdfTeX keeps a per-run `/ID` that
+  must be canonicalized. Because the strict surface is the `/ID`-canonical
+  hash, the same gate survives a later engine migration.
 - Even after migration, keep the sidecar + reuse rule: it is the layer that
   makes repacks byte-identical regardless of engine behavior.
 
@@ -219,17 +237,18 @@ Notes from the field:
 - [ ] Verification: qpdf missing → skip (not fail); strict determinism is on the
       `/ID`-canonical hash (ledger-pinned), not on the qpdf-stripped hash
 - [ ] Manifest includes the sidecar; delivery gate verifies raw hash P0
-- [x] Migration documented: TeXLive + `SOURCE_DATE_EPOCH` + `TEXMFOUTPUT` — landed; the acceptance ledger (`docs/ID_RESIDUAL_ACCEPTANCE.md`) records the measured canonical hashes per engine and platform
+- [ ] Migration documented: TeXLive + `SOURCE_DATE_EPOCH` + `TEXMFOUTPUT`
 - [ ] Repack proof: consecutive repacks byte-identical (zip hash stable)
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| Sidecar hash differs after every repack | qpdf non-determinism | Apply reuse rule (regenerate only on raw change) |
-| Strict determinism gate false-positives | Strict is on the qpdf-stripped hash (or on raw bytes) | Gate on the `/ID`-canonical hash pinned to an acceptance ledger; `--no-strict-determinism` only for diagnosis |
-| Frozen record stale after rebuild | PDF recompiled | Regenerate record, review diff, commit as new frozen version |
-| `qpdf` not installed in CI | Optional layer | Return `(raw, None)` and skip — never fail on absent optional tool |
+| Symptom                                      | Cause                                                 | Fix                                                                                                           |
+| -------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Sidecar hash differs after every repack      | qpdf non-determinism                                  | Apply reuse rule (regenerate only on raw change)                                                              |
+| Strict determinism gate false-positives      | Strict is on the qpdf-stripped hash (or on raw bytes) | Gate on the `/ID`-canonical hash pinned to an acceptance ledger; `--no-strict-determinism` only for diagnosis |
+| Hash changes only across sessions or engines | SDE not exported to the engine that actually ran      | Export SDE to _every_ engine invocation, then re-run the N-run experiment before touching the gate            |
+| Frozen record stale after rebuild            | PDF recompiled                                        | Regenerate record, review diff, commit as new frozen version                                                  |
+| `qpdf` not installed in CI                   | Optional layer                                        | Return `(raw, None)` and skip — never fail on absent optional tool                                            |
 
 ## References
 
@@ -237,5 +256,7 @@ Notes from the field:
 - Reproducible builds (PDFs): https://reproducible-builds.org/
 - TeXLive + SOURCE_DATE_EPOCH: https://reproducible-builds.org/docs/source-date-epoch/
 - Field artifacts (leibniz2): `qpdf_determinism_experiment.py`,
-  `qpdf_determinism_output.txt`, MANIFEST V5i/V5k/V5l/V5m notes,
-  `repack_delivery.py` sidecar-reuse logic, `verify_delivery.py` K6-DETERM
+  `qpdf_determinism_output.txt`, MANIFEST V5i/V5k/V5l/V5m/V5p notes,
+  `repack_delivery.py` sidecar-reuse logic, `verify_delivery.py` K6-DETERM,
+  and the acceptance ledger `docs/ID_RESIDUAL_ACCEPTANCE.md` (§2 measurements,
+  §4 canonical hash ledger, §6 strict-gate semantics)

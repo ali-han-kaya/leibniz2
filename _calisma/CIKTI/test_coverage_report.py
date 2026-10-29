@@ -286,6 +286,8 @@ HOOK_COVERAGE = {
         "test_doc_protection_count.py",
         "test_fail_closed_gates.py",
         "test_plist_keepalive_golden.py",
+        "test_repack_canonical_binding.py",
+        "test_check_id_residual_doc_sync.py",
     ],
 }
 
