@@ -691,6 +691,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-28 | fix | (ci) feed Trivy gate inputs to the SARIF comment script (#154) | [`9f7a367`](https://github.com/ali-han-kaya/leibniz2/commit/9f7a367) |
 | 2026-10-28 | fix | (ci) stop reporting MEDIUM/LOW Trivy findings as HIGH blockers (#156) | [`e6ad9dd`](https://github.com/ali-han-kaya/leibniz2/commit/e6ad9dd) |
 | 2026-10-28 | docs | (deploy) kanit satiri e6ad9dd1 (trivy seviye duzeltmesi) (#158) | [`790cb7f`](https://github.com/ali-han-kaya/leibniz2/commit/790cb7f) |
+| 2026-10-29 | test | (battery) parallel runner, vacuous classifier, keyboard E2E (#160) | [`68b6239`](https://github.com/ali-han-kaya/leibniz2/commit/68b6239) |
 
 ### Regresyon notları
 
