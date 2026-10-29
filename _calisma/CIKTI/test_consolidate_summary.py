@@ -199,6 +199,10 @@ class TestConsolidateSummary(unittest.TestCase):
             paths = {k: dd / f"{k}.json" for k in
                      ("k0", "budget", "lineage", "klayers")}
             paths["precommit"] = dd / "logs" / "PRECOMMIT_RAPORU.json"
+            # K12/K13'ü de temp dizine sabitle (dosya yok → ⚠️): yoksa
+            # konsolidatör CWD'deki gerçek `logs/` varsayılanını okur.
+            paths["k12"] = dd / "logs" / "k12_repro_manifest.json"
+            paths["k13"] = dd / "logs" / "k13_repro_manifest.json"
             code, out = self._run(paths)
         self.assertEqual(code, 0)
         # Panoda eksik sidecar ⚠️ olarak görünür (tek satır korunur).
@@ -275,6 +279,10 @@ class TestConsolidateSummary(unittest.TestCase):
                 "budget": dd / "budget_verify.json",
                 "lineage": dd / "lineage_findings.json",
                 "klayers": dd / "klayers.json",
+                # Bkz. diğer helper'lar: CWD'deki `logs/` varsayılanına
+                # düşmeyi engelle (CI'da gerçek K12 sidecar'ı vardır).
+                "k12": dd / "logs" / "k12_repro_manifest.json",
+                "k13": dd / "logs" / "k13_repro_manifest.json",
             }
             code, out = self._run(paths)
         self.assertEqual(code, 0)
@@ -389,6 +397,13 @@ class TestDashboardOnlyAndSkip(unittest.TestCase):
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            # K12/K13 yolu verilmezse konsolidatör CWD'ye göre `logs/`
+            # varsayılanına düşer. CI'da repo kökünde
+            # `logs/k12_repro_manifest.json` durur; o zaman pano ⚠️ değil ✅
+            # yazar ve bu testler ortama göre kırılır. Yolu açıkça geçerek
+            # testi hermetic tut (dosya yok → ⚠️ beklentisi sabit).
+            "k12": d / "logs" / "k12_repro_manifest.json",
+            "k13": d / "logs" / "k13_repro_manifest.json",
         }
 
     def test_dashboard_only_writes_only_dashboard(self):
@@ -511,6 +526,13 @@ class TestSectionContentValidation(unittest.TestCase):
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            # K12/K13 yolu verilmezse konsolidatör CWD'ye göre `logs/`
+            # varsayılanına düşer. CI'da repo kökünde
+            # `logs/k12_repro_manifest.json` durur; o zaman pano ⚠️ değil ✅
+            # yazar ve bu testler ortama göre kırılır. Yolu açıkça geçerek
+            # testi hermetic tut (dosya yok → ⚠️ beklentisi sabit).
+            "k12": d / "logs" / "k12_repro_manifest.json",
+            "k13": d / "logs" / "k13_repro_manifest.json",
         }
 
     def _run(self, paths):
@@ -646,6 +668,13 @@ class TestPrecommitAndK0Content(unittest.TestCase):
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            # K12/K13 yolu verilmezse konsolidatör CWD'ye göre `logs/`
+            # varsayılanına düşer. CI'da repo kökünde
+            # `logs/k12_repro_manifest.json` durur; o zaman pano ⚠️ değil ✅
+            # yazar ve bu testler ortama göre kırılır. Yolu açıkça geçerek
+            # testi hermetic tut (dosya yok → ⚠️ beklentisi sabit).
+            "k12": d / "logs" / "k12_repro_manifest.json",
+            "k13": d / "logs" / "k13_repro_manifest.json",
         }
 
     def _run(self, paths):
@@ -829,6 +858,13 @@ class TestFileSink(unittest.TestCase):
             "budget": d / "budget_verify.json",
             "lineage": d / "lineage_findings.json",
             "klayers": d / "klayers.json",
+            # K12/K13 yolu verilmezse konsolidatör CWD'ye göre `logs/`
+            # varsayılanına düşer. CI'da repo kökünde
+            # `logs/k12_repro_manifest.json` durur; o zaman pano ⚠️ değil ✅
+            # yazar ve bu testler ortama göre kırılır. Yolu açıkça geçerek
+            # testi hermetic tut (dosya yok → ⚠️ beklentisi sabit).
+            "k12": d / "logs" / "k12_repro_manifest.json",
+            "k13": d / "logs" / "k13_repro_manifest.json",
         }
 
     def test_file_sink_matches_stdout(self):
