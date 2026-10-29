@@ -21,8 +21,8 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **28 job**'u 4 kategoride
-> sunar: 13 **required** + 12 **advisory** + 3 **PR-only/manifest** job. Branch protection
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **32 job**'u 4 kategoride
+> sunar: 16 **required** + 13 **advisory** + 3 **PR-only/manifest** job. Branch protection
 > yalnızca required job'ları bloke eder.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
@@ -207,7 +207,7 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (24 job — 12 required + 10 advisory + 2 PR-only;
+# 3) CI'ı izle (32 job — 16 required + 13 advisory + 3 PR-only;
 #    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
@@ -222,7 +222,7 @@ gh api "repos/ali-han-kaya/leibniz2/actions/runs/$RUN_ID/artifacts" \
 > **Tek komut karşılığı:** `bash docs/publish_wrapper.sh --incremental` — repo
 > zaten yayında olduğundan **idempotent**: precheck → push (enforce_admins
 > geçici kapatma dahil) → CI izle → job durumları + `status_checks.py --gh`
-> (9 check + merge engeli smoke). Repo oluşturma/remote ekleme atlanır; push
+> (16 check + merge engeli smoke). Repo oluşturma/remote ekleme atlanır; push
 > yoksa HEAD için mevcut run izlenir. Önce risksiz önizle:
 > `bash docs/publish_wrapper.sh --incremental --dry-run`
 > (log: `logs/publish_*.log`; `--dry-run-summary` ile komut akışı markdown'ı).
@@ -334,7 +334,7 @@ gh repo create leibniz2 \
     --add-readme=false     # bizim README'miz commit'lenecek; çakışmasın
 
 # Wrapper (publish_wrapper.sh) kullanılıyorsa burada OTOMATİK doğrulama koşar:
-#   python3 _calisma/CIKTI/status_checks.py      # 9 ad workflow'dan türetilir
+#   python3 _calisma/CIKTI/status_checks.py      # 16 ad workflow'dan türetilir
 #   python3 _calisma/CIKTI/status_checks.py --gh # GitHub eşleşmesi (koruma yoksa UYARI,
 #                                                # gerçek drift varsa FAIL — fail-closed)
 
@@ -348,17 +348,24 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #     Web UI'da (adım adım → aşağıdaki "Branch protection — web UI adım adım"):
 #       "Add branch protection rule" → Branch name pattern: `main`
 #       ✓ Require status checks to pass before merging
-#         → 9 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
+#         → 16 check (adlar = workflow job `name:` alanları — tek kaynaktan al):
 #             python3 _calisma/CIKTI/status_checks.py           # Delivery verification — K1-K19 (single entry point)
 #           Action runtime check (node24)
 #           Budget shield (aggregated)
 #           Pre-commit P0 label gate
+#           Commit-msg gate
 #           Static markdown reports (incl. pre-commit findings)
 #           Reproducibility bundle
 #           Config drift check (gen_config + diff-on-drift)
+#           Config snapshot ↔ CONFIG_BASENAMES sync check
 #           Repack determinism + verify (sidecar sync)
 #           Online verification trend (refs-online across runs)
-#         (PR-only ama required DEĞİL: label-gate-p1, commit-msg-gate, manifest-comment
+#           CI-SIMULATE (advisory)
+#           A11y gate (axe-core, fail-closed)
+#           TeXLive acceptance — CI-linux pinned (fail-closed)
+#           Dashboard interaction E2E (node sandbox + Chromium CDP)
+#           Plist P1 drift gate (fail-closed, Linux)
+#         (PR-only ama required DEĞİL: label-gate-p1, manifest-comment, budget-comment
 #          — push'ta çalışmaz; Pre-commit P0 label gate BİLEREK required'dır)
 #           → ✓ "Require branches to be up to date before merging" (strict)
 #       ✓ Do not allow bypassing the above settings   (enforce_admins)
@@ -366,7 +373,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 #       ✓ Disallow deletions
 ```
 
-### Branch protection — web UI adım adım (12 required check)
+### Branch protection — web UI adım adım (16 required check)
 
 > 📷 **Görsel kılavuz:** her adımın ekran görüntüsü
 > [`docs/branch-protection-guide/`](branch-protection-guide/) altında (8
@@ -395,7 +402,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
    - **Ön koşul:** check'lerin arama listesinde görünmesi için o branch'te CI'ın
      **en az bir kez koşmuş** olması gerekir. Yeni/boş repoda kural kuruyorsan önce
      bir push ya da PR ile workflow'u tetikle, yeşil run'ı bekle, sonra bu adıma dön.
-   -   Arama kutusuna şu **12 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
+   -   Arama kutusuna şu **16 adı** tek tek yazıp seç (birebir, `—` karakteri dahil):
      1. `Delivery verification — K1-K19 (single entry point)`
      2. `Action runtime check (node24)`
      3. `Budget shield (aggregated)`
@@ -408,6 +415,10 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
      10. `Repack determinism + verify (sidecar sync)`
      11. `Online verification trend (refs-online across runs)`
      12. `CI-SIMULATE (advisory)`
+     13. `A11y gate (axe-core, fail-closed)`
+     14. `TeXLive acceptance — CI-linux pinned (fail-closed)`
+     15. `Dashboard interaction E2E (node sandbox + Chromium CDP)`
+     16. `Plist P1 drift gate (fail-closed, Linux)`
      > **Not:** Advisory'ler (precheck, plist-check, mirror-check, daemon-http,
      > audit-*) ve P1 label gate (opsiyonel) required DEĞİL.
      > `Commit-msg gate` ve `Pre-commit P0 label gate` PR-only'dir ama BİLEREK
@@ -435,7 +446,7 @@ open "https://github.com/ali-han-kaya/leibniz2/settings/branches"
 9. **Doğrula (otomatik):** koruma kurulduktan sonra:
    ```bash
    python3 _calisma/CIKTI/status_checks.py --gh
-   # SONUÇ: PASS — 9 check birebir eşleşiyor (workflow ↔ GitHub)
+   # SONUÇ: PASS — 16 check birebir eşleşiyor (workflow ↔ GitHub)
    ```
    Eksik/fazla check → exit 1 (fail-closed): listeyi `status_checks.py` çıktısıyla
    eşitle veya workflow'u güncelle.
@@ -486,7 +497,7 @@ etikete göre yanlış geçmez/bloke etmez.
 ```bash
 python3 _calisma/CIKTI/status_checks.py
 # → listede "Pre-commit P0 label gate" var (required); "Pre-commit P1 label gate
-#   (optional)" YOK (opsiyonel — required değil). (toplam 9 check)
+#   (optional)" YOK (opsiyonel — required değil). (toplam 16 check)
 ```
 
 **Davranış tablosu (P0 — zorunlu):**
@@ -575,7 +586,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (32 job = 15 required + 14 advisory + 3 PR-only):**
+**Job kategorileri (32 job = 16 required + 13 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -690,7 +701,7 @@ git push origin test/protection-check  # ← feature branch: geçer
 # Şimdi main'e PR aç:
 gh pr create --base main --head test/protection-check --title "docs: protection smoke"
 # Merge denenir. CI artık YEŞİL olduğundan reddedilme nedeni "FAIL check" değil:
-# required check'ler (9 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
+# required check'ler (16 kapı) TAMAMLANMADAN veya branch main'in gerisindeyken
 # (strict) merge REDDEDİLMELİ.
 gh pr merge --squash
 git checkout main

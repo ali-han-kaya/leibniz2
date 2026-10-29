@@ -11,8 +11,10 @@ PyYAML gerektirir (status_checks.py modül-seviyesi import). CI birim test
 adımında pyyaml yoksa bu dosya bütünüyle SKIP olur (test_check_action_runtimes.py
 ile aynı desen).
 """
+import contextlib
 import io
 import json
+import os
 import pathlib
 import sys
 import unittest
@@ -506,6 +508,176 @@ class TestGhIntegration(unittest.TestCase):
                 sc.main(["--gh", "--repo", "owner/name"])
         self.assertEqual(cm.exception.code, 1)
 
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
+class TestScopedProtectionToken(unittest.TestCase):
+    """Kapsamlı okuma token'ı — CI'da UNREADABLE'ı gerçek okumaya çevirir.
+
+    Tarihsel kök-neden (2026-10-26): `GITHUB_TOKEN` branch protection
+    okuyamaz (`administration` izni Actions `permissions:` bloğunda
+    GEÇERSİZ — eklenirse workflow 0 job üretir). Bu yüzden `status_checks
+    --gh` CI'da her koşumda UNREADABLE dönüyordu: pre-commit
+    `check-status-check-names` yalnız yerelde (gh auth) doğrulayabiliyordu.
+
+    Sözleşme:
+      1) `PROTECTION_PAT` (tercih) / `GH_ADMIN_TOKEN` (yedek) okunur;
+         boş/boşluklu değer token SAYILMAZ (kurulmamış secret boş string'dir).
+      2) Token YALNIZ `gh api .../protection` çağrısına GH_TOKEN olarak
+         geçer — repo çözümlemesi/alert gibi diğer çağrılar ambient kimlikle
+         kalır (admin token'ı gereksiz yere geniş kullanılmaz).
+      3) Token yokken davranış DEĞİŞMEZ (UNREADABLE + exit 1); token varken
+         okuma reddedilirse UYARI bunu ayrıca söyler (bayat PAT "token yok"
+         gibi okunmaz).
+    """
+
+    ENVS = ("PROTECTION_PAT", "GH_ADMIN_TOKEN")
+
+    @contextlib.contextmanager
+    def _only_env(self, **values):
+        """Yalnız verilen token env'leri set olsun (diğerleri temizlenir)."""
+        saved = {k: os.environ.get(k) for k in self.ENVS}
+        for k in self.ENVS:
+            os.environ.pop(k, None)
+        os.environ.update({k: v for k, v in values.items() if v is not None})
+        try:
+            yield
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+    def test_prefers_protection_pat_and_ignores_blank_values(self):
+        self.assertEqual(
+            sc.protection_token({"PROTECTION_PAT": "pat-1",
+                                 "GH_ADMIN_TOKEN": "admin-1"}), "pat-1")
+        self.assertEqual(sc.protection_token({"GH_ADMIN_TOKEN": "admin-1"}),
+                         "admin-1")
+        for blank in ("", "   ", None):
+            with self.subTest(blank=blank):
+                self.assertIsNone(
+                    sc.protection_token({"PROTECTION_PAT": blank,
+                                         "GH_ADMIN_TOKEN": ""}))
+        self.assertIsNone(sc.protection_token({}))
+
+    def test_run_gh_injects_token_only_when_given(self):
+        done = mock.Mock(returncode=0, stdout="{}\n", stderr="")
+        with mock.patch.object(sc.subprocess, "run", return_value=done) as run:
+            sc.run_gh(["gh", "api", "repos/o/r/branches/main/protection"],
+                      token="pat-1")
+            kwargs = run.call_args.kwargs
+            self.assertEqual(kwargs["env"]["GH_TOKEN"], "pat-1")
+            # Ambient ortam korunur (PATH vb.) — yalnız GH_TOKEN ezer.
+            self.assertIn("PATH", kwargs["env"])
+            run.reset_mock()
+            sc.run_gh(["gh", "api", "user"])
+            self.assertNotIn("env", run.call_args.kwargs,
+                             "token verilmediğinde ambient kimlik korunmalı")
+
+    def _run_main(self, argv):
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdout", new=buf):
+            try:
+                sc.main(argv)
+            except SystemExit as exc:
+                code = exc.code
+            else:
+                code = 0
+        return code, buf.getvalue()
+
+    def test_protection_read_uses_the_scoped_token(self):
+        protection = _protection(contexts=list(sc.gate_jobs().values()))
+        with self._only_env(PROTECTION_PAT="pat-1"), \
+                mock.patch.object(sc, "run_gh",
+                                  return_value=json.dumps(protection)) as run:
+            code, out = self._run_main(
+                ["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["verdict"], "PASS")
+        self.assertEqual(run.call_count, 1,
+                         "--repo verildiğinde tek gh çağrısı beklenir")
+        self.assertEqual(run.call_args.kwargs.get("token"), "pat-1")
+
+    def test_without_token_the_call_is_unchanged(self):
+        with self._only_env(), \
+                mock.patch.object(sc, "run_gh",
+                                  return_value=json.dumps(_protection())) as run:
+            self._run_main(["--gh", "--repo", "owner/name", "--json"])
+        self.assertIn(run.call_args.kwargs.get("token"), (None,),
+                      "token yokken koruma okuması ambient kimlikle kalmalı")
+
+    def test_rejected_scoped_token_is_called_out_in_the_warning(self):
+        with self._only_env(PROTECTION_PAT="expired-pat"), \
+                mock.patch.object(sc, "run_gh",
+                                  side_effect=RuntimeError(
+                                      "HTTP 403: Resource not accessible")):
+            code, out = self._run_main(
+                ["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(code, 1)
+        payload = json.loads(out)
+        self.assertEqual(payload["verdict"], "UNREADABLE")
+        self.assertIn("scoped token denendi", payload["warning"],
+                      "bayat/reddedilmiş PAT, 'token yok' gibi okunmamalı")
+
+    def test_no_token_warning_stays_plain(self):
+        with self._only_env(), \
+                mock.patch.object(sc, "run_gh",
+                                  side_effect=RuntimeError(
+                                      "HTTP 403: Resource not accessible")):
+            code, out = self._run_main(
+                ["--gh", "--repo", "owner/name", "--json"])
+        self.assertEqual(code, 1)
+        payload = json.loads(out)
+        self.assertEqual(payload["verdict"], "UNREADABLE")
+        self.assertNotIn("scoped token denendi", payload["warning"])
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML gerekli")
+class TestCiWiringOfTheScopedToken(unittest.TestCase):
+    """verify.yml, kapsamlı token'ı `gh` çağrısını yapan adımlara verir.
+
+    Token'ı yalnız kodda desteklemek yetmez: CI'da secret env'e girmezse
+    `check-status-check-names` yine UNREADABLE döner. Bu yüzden iki adım da
+    (precheck script'i + sidecar kanıtı) `secrets.PROTECTION_PAT` taşımalı.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = _WORKFLOW.read_text(encoding="utf-8")
+
+    def _step(self, name):
+        blocks = self.text.split("\n      - name: ")
+        for block in blocks:
+            if block.startswith(name):
+                return block
+        self.fail(f"adım yok: {name}")
+
+    def test_both_status_check_steps_get_the_scoped_secret(self):
+        for name in ("Run status_checks --gh --json (sidecar kanıt)",
+                     "Run AŞAMA 0 precheck (publish_precheck.sh)"):
+            with self.subTest(step=name):
+                block = self._step(name)
+                self.assertIn("PROTECTION_PAT: ${{ secrets.PROTECTION_PAT }}",
+                              block,
+                              f"{name}: kapsamlı token CI'da env'e girmiyor "
+                              "→ koruma yine UNREADABLE döner")
+
+    def test_steps_keep_the_repo_token_for_other_gh_calls(self):
+        # Ambient gh kimliği (repo çözümleme/alert) korunmalı: kapsamlı token
+        # YALNIZ koruma okumasına geçer.
+        block = self._step("Run status_checks --gh --json (sidecar kanıt)")
+        self.assertIn("GH_TOKEN: ${{ github.token }}", block)
+
+    def test_no_workflow_declares_the_invalid_administration_permission(self):
+        wf_dir = _WORKFLOW.parent
+        for path in sorted(wf_dir.glob("*.yml")):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                self.assertFalse(
+                    line.strip().startswith("administration:"),
+                    f"{path.name}: `administration` Actions'ta GEÇERSİZ — "
+                    "eklenirse workflow 0 job üretir (kapsamlı token kullanın)")
 
 if __name__ == "__main__":
     unittest.main()

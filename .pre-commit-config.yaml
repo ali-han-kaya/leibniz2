@@ -360,7 +360,9 @@ repos:
           status_checks.py --gh --json çıktısında eski K1-K14 required check
           adlarını tespit eder; K1-K19 kanonik adıyla yeniden adlandırılmamış
           branch protection drift'i fail-closed bloke edilir. GitHub erişimi
-          yoksa kapı UNREADABLE sonucunu gizlemez.
+          yoksa kapı UNREADABLE sonucunu gizlemez; okuma yetkisi admin izni
+          ister — ortamda PROTECTION_PAT (fine-grained, Administration: read)
+          veya gh auth olmalı (GH_ADMIN_TOKEN yedek isimdir).
         # venv-guard (686/705 satırlarıyla aynı desen): status_checks.py
         # PyYAML ister; sistem python3'ünde PyYAML yoksa modül importu
         # çöker ve kapı sahte-FAIL verir. Repo venv'i (fresh_clone_setup
@@ -492,6 +494,22 @@ repos:
         stages: [pre-commit]
         verbose: true
 
+      - id: check-status-check-doc-sync
+        name: "Verify PUBLISH_SCENARIO/guide required-check counts ↔ derived set"
+        description: >-
+          check_status_check_doc_sync.py: docs/PUBLISH_SCENARIO.md ve
+          docs/branch-protection-guide/{README.md,guide.html} içindeki job
+          sayıları (total/required/advisory/PR-only) ile required check
+          adlarını status_checks.py türetimiyle birebir karşılaştırır. Sayı ya da
+          ad drift ederse commit bloke — `--write` sayıları ve EXCLUDE'ı
+          düzeltir, ad listeleri elle güncellenir. OFFLINE, stdlib-only, ~0.3s.
+        entry: python3 _calisma/CIKTI/check_status_check_doc_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-doc-job-sync
         name: "Verify PUBLISH_SCENARIO job table ↔ workflow job names sync"
         description: >-
@@ -584,9 +602,11 @@ repos:
         description: >-
           update_preview.sh --plist-check (K12 kapısı) + check_plist_drift.py
           exit 0/1/2 davranışını kapsayan birim testleri koşar
-          (0=GÜNCEL/PASS, 1=BAYAT/drift, 2=şablon yok/hata). Fake HOME
-          altında koşar — gerçek LaunchAgents/Caches'a dokunmaz, plistlib
-          fallback'i sayesinde Linux CI'da da çalışır.
+          (0=GÜNCEL/PASS, 1=BAYAT/drift, 2=şablon yok/hata). P0 (fazla profil)
+          ve P1 (bayat/eksik/geçersiz) drift'lerin ikisi de FAIL-CLOSED'dır —
+          advisory sınıf yok; test kırılırsa hook nonzero döner ve commit
+          bloke olur. Fake HOME altında koşar — gerçek LaunchAgents/Caches'a
+          dokunmaz, plistlib fallback'i sayesinde Linux CI'da da çalışır.
         entry: python3 _calisma/CIKTI/check_plist_drift_hook.py
         language: system
         always_run: true

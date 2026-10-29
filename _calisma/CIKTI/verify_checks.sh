@@ -128,7 +128,7 @@ verify_checks() {
     warn "branch protection kurulu değil — AŞAMA 1 (b) web UI'da kur (gh api 404; publish öncesi normal)"
     vc_verdict="WARN"; vc_note="branch protection kurulu değil (gh api 404)"
   elif echo "$sc_gh_out" | grep -q "erişilemedi"; then
-    warn "branch protection okunamadı (yetki/ağ) — gerçek doğrulama yerelde gh auth ile yapılır (exit $sc_gh_exit)"
+    warn "branch protection okunamadı (yetki/ağ) — kapsamlı token (PROTECTION_PAT / GH_ADMIN_TOKEN) veya yerel gh auth gerekir (exit $sc_gh_exit)"
     vc_verdict="WARN"; vc_note="branch protection okunamadı (yetki/ağ)"
   elif [ "${DRY_RUN:-0}" = "1" ]; then
     warn "status_checks.py --gh dry-run'da GitHub'a ulaşamadı (repo yeni oluşturulacak?) — önizleme devam"

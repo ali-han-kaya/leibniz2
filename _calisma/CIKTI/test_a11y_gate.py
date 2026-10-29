@@ -420,8 +420,11 @@ class GuideSourceTests(unittest.TestCase):
     """Statik görsel kılavuzun tarayıcısız semantik sözleşmeleri.
 
     CI axe taraması canlı kanıttır; bu test aynı niyeti kaynakta erken
-    yakalar: 39 checkbox'un ve örtük 4 branch-name text input'unun her biri
+    yakalar: 43 checkbox'un ve örtük 4 branch-name text input'unun her biri
     erişilebilir ad taşır; sekiz ekran tek bir main landmark altında toplanır.
+    (Sayı 39'dan 43'e çıktı: kılavuza a11y gate, TeXLive acceptance ve
+    K1-K19 zinciri satırları girdi — sayı, tarama boş kalırsa kırmızıya
+    düşsün diye pozitif bir sabit.)
     """
 
     def setUp(self):
@@ -431,7 +434,7 @@ class GuideSourceTests(unittest.TestCase):
     def test_every_checkbox_has_descriptive_aria_label(self):
         tags = re.findall(r"<input\b[^>]*\btype=[\"']checkbox[\"'][^>]*>",
                            self.html, flags=re.I)
-        self.assertEqual(len(tags), 39)
+        self.assertEqual(len(tags), 43)
         for tag in tags:
             self.assertRegex(tag, r"\baria-label=[\"'][^\"']+[\"']", tag)
 
