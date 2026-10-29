@@ -10,16 +10,16 @@ Bu belge **2026-10-07** durumunu yansıtır: `orca` CLI (app kapalıyken algıla
 
 ## 1. İki aracın kimliği (doğrulanmış, tahmin değil)
 
-| | **Orca built-in browser** (`orca …`) | **agent-browser** (`agent-browser …`) |
-|---|---|---|
-| Ne | Orca uygulamasına gömülü, **worktree-kapsamlı** sekme yüzeyi | Bağımsız Rust CLI; Chrome/Chromium'u CDP ile sürer |
-| Motor | Orca'nın kendi gömülü sayfası ("not Chrome, Safari, or Orca's own app UI") | Bağımsız yüklediği **Chrome for Testing 153.0.8010.47** (`~/.agent-browser/browsers/…`) |
-| Aldığı kaynak | Orca uygulaması çalışıyor olmalı — uygulama kapalıyken `tab list --json` → `runtime_unavailable: "Could not read Orca runtime metadata … Start the Orca app first."` | Kendi daemon'ı (`agent-browser-darwin-arm64`, ölçülen ~9.3 MB) + Chrome ağacı |
-| A11y çıktı | `orca snapshot` — element ref'leri (`@e1` benzeri) | `agent-browser snapshot -i` — aynı kalıp, `[ref=eN]`; ölçülü: çalışma sayfasında **4,399 B / 106 satır** |
-| Oturum durumu | `tab profile` ailesi: profile create/clone/switch (worktree'a bağlı) | `--session` ailesi + auth vault + video kaydı |
-| Sayfa-affinity | **Orca worktree tablosuna bağlı**: içindeki sekme kendi izolasyonunda çalışır; Orca UI dışından bakan Playwright/CDP göremez | Herhangi bir URL; dış Chrome/Safari gerekirse ayrı yol |
-| Kompoze kullanım | `orca exec --command "…"` (agent-browser komutlarını bu yüzeyden de çalıştırabilir) | `agent-browser exec` yok; komutlar birer-bir |
-| Sınırlı-görüş | Orca dışına dokunmaz: Orca UI/settings veya dış webview **Computer Use**'a gider | Orca uygulamasının iç yüzeyine (app chrome) erişemez |
+|                  | **Orca built-in browser** (`orca …`)                                                                                                                                 | **agent-browser** (`agent-browser …`)                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Ne               | Orca uygulamasına gömülü, **worktree-kapsamlı** sekme yüzeyi                                                                                                         | Bağımsız Rust CLI; Chrome/Chromium'u CDP ile sürer                                                       |
+| Motor            | Orca'nın kendi gömülü sayfası ("not Chrome, Safari, or Orca's own app UI")                                                                                           | Bağımsız yüklediği **Chrome for Testing 153.0.8010.47** (`~/.agent-browser/browsers/…`)                  |
+| Aldığı kaynak    | Orca uygulaması çalışıyor olmalı — uygulama kapalıyken `tab list --json` → `runtime_unavailable: "Could not read Orca runtime metadata … Start the Orca app first."` | Kendi daemon'ı (`agent-browser-darwin-arm64`, ölçülen ~9.3 MB) + Chrome ağacı                            |
+| A11y çıktı       | `orca snapshot` — element ref'leri (`@e1` benzeri)                                                                                                                   | `agent-browser snapshot -i` — aynı kalıp, `[ref=eN]`; ölçülü: çalışma sayfasında **4,399 B / 106 satır** |
+| Oturum durumu    | `tab profile` ailesi: profile create/clone/switch (worktree'a bağlı)                                                                                                 | `--session` ailesi + auth vault + video kaydı                                                            |
+| Sayfa-affinity   | **Orca worktree tablosuna bağlı**: içindeki sekme kendi izolasyonunda çalışır; Orca UI dışından bakan Playwright/CDP göremez                                         | Herhangi bir URL; dış Chrome/Safari gerekirse ayrı yol                                                   |
+| Kompoze kullanım | `orca exec --command "…"` (agent-browser komutlarını bu yüzeyden de çalıştırabilir)                                                                                  | `agent-browser exec` yok; komutlar birer-bir                                                             |
+| Sınırlı-görüş    | Orca dışına dokunmaz: Orca UI/settings veya dış webview **Computer Use**'a gider                                                                                     | Orca uygulamasının iç yüzeyine (app chrome) erişemez                                                     |
 
 `orca exec --command …` köprüsü önemli: Orca, agent-browser'ı **alt araç**
 olarak çalıştırabilir; dolayısıyla ikisi rekabet değil, bazen kompozit.
@@ -29,18 +29,18 @@ olarak çalıştırabilir; dolayısıyla ikisi rekabet değil, bazen kompozit.
 Karar sütununun okunuşu: "✔ araç doğal", "⚠ araç çalışır ama pahalı/yerine düşük",
 "✖ çatışır/yapamaz".
 
-| # | Senaryo | Orca embedded | agent-browser | Not |
-|---|---|---|---|---|
-| S1 | **Repo-dashboard QA** (`:8000` preview gibi, Orca dışı sayfa) | ✖ Orca dışı sayfa — Playwright/CDP uygun | ✔ tek-komutlu `open/snapshot/click` | Bizim `preview_server.py` işleri bu kutuya düşer |
-| S2 | **Orca worktree'ındaki agent-owned sayfa** (Orca sekmesinde açık, aynı worktree'a bağlı iş) | ✔ worktree-affinity; snapshot/ref akışı yerli | ⚠ erişebilir ama oturum/profil durumu Orca'da kalır | Orca tab listesi aside — en temizi |
-| S3 | **Dış site QA** (giriş formları, 3rd-party yüzeyleri) | ⚠ gömülü tarayıcı dış sayfa açar ama bu senaryo ona bırakılmamış | ✔ auth-vault + dev-tools ölçümleri | CDP tabanlı akış |
-| S4 | **Elektron/desktop uygulama DOM'u** (VS Code, Slack tarzı) | ✖ | ✔ `agent-browser skills get electron` kendisi bu senaryo için | |
-| S5 | **Video/artefact kaydı** | ⚠ yok (tab show/screenshot var) | ✔ `record --output` | |
-| S6 | **Multi-session paralel iş** (a/b agent'ları) | ⚠ worktree başına tab | ✔ `--session a/b` izole | |
-| S7 | **Hızlı a11y depo konsolu** (repo QA'da PR öncesi smoke) | ✖ | ✔ tek-chrome + `snapshot -i` küçük-ağaç | |
-| S8 | **Orca uygulaması durum-sız kullanım** (app kapalı) | ✖ runtime_unavailable (ölçüldü) | ✔ daemon bağımsız | |
-| S9 | **Orca tablosu agent handoff akışları** (worktree spawn + prompt) | ✔ `orca worktree create --agent …` | ✖ | Bu, tarayıcı-değil; sadece referans |
-| S10 | **Playwright/CDP hedefi gerektiren çağrı** (page.route, SSE interception) | ✖ | ⚠ | Playwright bu iş-yüzdesinde hâlâ birinci |
+| #   | Senaryo                                                                                     | Orca embedded                                                     | agent-browser                                                  | Not                                              |
+| --- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------ |
+| S1  | **Repo-dashboard QA** (`:8000` preview gibi, Orca dışı sayfa)                               | ✖ Orca dışı sayfa — Playwright/CDP uygun                         | ✔ tek-komutlu `open/snapshot/click`                           | Bizim `preview_server.py` işleri bu kutuya düşer |
+| S2  | **Orca worktree'ındaki agent-owned sayfa** (Orca sekmesinde açık, aynı worktree'a bağlı iş) | ✔ worktree-affinity; snapshot/ref akışı yerli                    | ⚠ erişebilir ama oturum/profil durumu Orca'da kalır           | Orca tab listesi aside — en temizi               |
+| S3  | **Dış site QA** (giriş formları, 3rd-party yüzeyleri)                                       | ⚠ gömülü tarayıcı dış sayfa açar ama bu senaryo ona bırakılmamış | ✔ auth-vault + dev-tools ölçümleri                            | CDP tabanlı akış                                 |
+| S4  | **Elektron/desktop uygulama DOM'u** (VS Code, Slack tarzı)                                  | ✖                                                                | ✔ `agent-browser skills get electron` kendisi bu senaryo için |                                                  |
+| S5  | **Video/artefact kaydı**                                                                    | ⚠ yok (tab show/screenshot var)                                  | ✔ `record --output`                                           |                                                  |
+| S6  | **Multi-session paralel iş** (a/b agent'ları)                                               | ⚠ worktree başına tab                                            | ✔ `--session a/b` izole                                       |                                                  |
+| S7  | **Hızlı a11y depo konsolu** (repo QA'da PR öncesi smoke)                                    | ✖                                                                | ✔ tek-chrome + `snapshot -i` küçük-ağaç                       |                                                  |
+| S8  | **Orca uygulaması durum-sız kullanım** (app kapalı)                                         | ✖ runtime_unavailable (ölçüldü)                                  | ✔ daemon bağımsız                                             |                                                  |
+| S9  | **Orca tablosu agent handoff akışları** (worktree spawn + prompt)                           | ✔ `orca worktree create --agent …`                               | ✖                                                             | Bu, tarayıcı-değil; sadece referans              |
+| S10 | **Playwright/CDP hedefi gerektiren çağrı** (page.route, SSE interception)                   | ✖                                                                | ⚠                                                             | Playwright bu iş-yüzdesinde hâlâ birinci         |
 
 ### Karar kuralı
 
@@ -61,9 +61,20 @@ Bu belge repo'da bugün tarayıcıya bakan 4 yüzeyi kapsar; hepsi S1 kutusuna d
 3. `test_a11y_gate.py` — axe (vendor snapshot; `check_security_browser.list`).
 4. Gelecek: agent-browser ile hızlı **manual-repro** (snapshot-to-chat akışı).
 
+### Haftalık cihaz-paritesi koşumu (2026-10-26)
+
+Panonun cihaz/tarayıcı katmanı (Chromium/CDP + Safari/WebKit) artık yalnız
+PR koşumunda değil **haftalık** da kanıt üretir: `dashboard-devices-drift.yml`
+(Pazartesi 04:29 UTC) iki katmanı tek giriş noktası
+`_calisma/CIKTI/dashboard_devices_smoke.sh` üzerinden koşar. Workflow
+advisory'dir (required check değil) ama SKIP/kırmızı olduğunda job KIRMIZI
+olur: sessiz yeşil haftalık koşum, cron'un erken-görünürlük amacını boşa
+çıkarırdı. Yerel karşılığı:
+`bash _calisma/CIKTI/dashboard_devices_smoke.sh --layer all`.
+
 Geri-kalan not: **CI'da (headless runner) Playwright kalır** — agent-browser
-    daemon'ı CI-container'a ekstra bir bağımlılık getirir; mevcut güven
-    süitesi (`check_security_browser.list`) Playwright'a sabittir.
+daemon'ı CI-container'a ekstra bir bağımlılık getirir; mevcut güven
+süitesi (`check_security_browser.list`) Playwright'a sabittir.
 
 ## 4. Doğrulama kaydı (2026-10-07 koşum)
 

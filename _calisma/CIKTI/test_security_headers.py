@@ -45,6 +45,11 @@ class TestSecurityHeaders(unittest.TestCase):
             f.write("<!doctype html><html><body>"
                     "<script data-build-ts></script>"
                     "</body></html>")
+        # /design-system/tokens.css rotası PREVIEW_DIR/design-system-tokens.css
+        # mirror'ından servis edilir (tek kaynak <repo>/design-system/tokens.css).
+        with open(os.path.join(cls._tmp.name, "design-system-tokens.css"), "w",
+                  encoding="utf-8") as f:
+            f.write(":root { --bg: #000; }\n")
         cls.server = HTTPServer(("127.0.0.1", 0), ps.Handler)
         cls.thread = threading.Thread(target=cls.server.serve_forever,
                                       daemon=True)
@@ -100,6 +105,29 @@ class TestSecurityHeaders(unittest.TestCase):
         with urllib.request.urlopen(req, timeout=10) as r:
             self.assertEqual(r.status, 200)
             self.assertEqual(r.read(), b"")
+
+    def test_head_keeps_stylesheet_mime(self):
+        """HEAD, stylesheet'in Content-Type'ını text/plain'e DÜŞÜRMEMELİ.
+
+        Ölçülen olay (2026-10-26): `HEAD /design-system/tokens.css?v=1`
+        `text/plain; charset=utf-8` dönerken aynı yolun GET'i
+        `text/css; charset=utf-8` dönüyordu. `X-Content-Type-Options: nosniff`
+        altında bu MIME arızasıdır: stil dosyasını HEAD başlıklarıyla
+        değerlendiren istemci (tarayıcı ön-yüklemesi, WebDriver oturumu, e2e
+        ön-uçuşu) onu reddeder ve pano stilsiz kalır. Sözleşme: HEAD'in
+        Content-Type'ı GET'inkiyle birebir aynı.
+        """
+        path = "/design-system/tokens.css?v=1"
+        req = urllib.request.Request(self.base + path, method="HEAD")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            head_type = r.headers.get("Content-Type")
+            self.assertEqual(r.read(), b"")
+        with urllib.request.urlopen(self.base + path, timeout=10) as r:
+            get_type = r.headers.get("Content-Type")
+        self.assertEqual(head_type, get_type,
+                         f"HEAD {head_type!r} != GET {get_type!r} — MIME paritesi")
+        self.assertTrue(str(head_type).startswith("text/css"),
+                        f"stylesheet HEAD'i text/css dönmeli, {head_type!r}")
 
     def test_csp_nonce_covers_injected_build_stamp(self):
         # Enjekte edilen inline script (window.BUILD_TS) nonce'lu olmalı ve
