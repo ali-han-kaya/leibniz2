@@ -162,6 +162,34 @@ class TestFindMissingCommits(unittest.TestCase):
         missing = gc.find_missing_commits(commits, existing)
         self.assertEqual(missing, [])
 
+    # ── META (heal botu) commit'leri: kendi satırını taşıyamaz → eksik sayılmaz.
+    # Sayılırsa heal her turda yeni bir bot PR'ı açar (sonsuz döngü).
+
+    def test_meta_commit_not_reported_missing(self):
+        """`chore(changelog): [bot] ...` en yeni commit → eksik listesi boş."""
+        commits = [self._ci("aaa1111", "2026-08-21",
+                            subject=gc.META_COMMIT_PREFIX + " satirlari ekle"),
+                   self._ci("bbb2222", "2026-08-20")]
+        existing = {"bbb2222"}
+        self.assertEqual(gc.find_missing_commits(commits, existing), [])
+
+    def test_meta_commit_does_not_mask_newer_real_commit(self):
+        """META commit en yeniyken ondan eski GERÇEK eksik commit yine raporlanır."""
+        commits = [self._ci("aaa1111", "2026-08-22",
+                            subject=gc.META_COMMIT_PREFIX + " satirlari ekle"),
+                   self._ci("bbb2222", "2026-08-21"),
+                   self._ci("ccc3333", "2026-08-20")]
+        existing = {"ccc3333"}
+        missing = gc.find_missing_commits(commits, existing)
+        self.assertEqual([c.short_hash for c in missing], ["bbb2222"])
+
+    def test_meta_prefix_definition_pinned(self):
+        """Prefix sözleşmesi sabittir: workflow ve heal aynı marker'ı kullanır."""
+        self.assertEqual(gc.META_COMMIT_PREFIX, "chore(changelog): [bot]")
+        self.assertTrue(gc.is_meta_commit(
+            self._ci("aaa1111", "2026-08-21", subject=gc.META_COMMIT_PREFIX + " x")))
+        self.assertFalse(gc.is_meta_commit(self._ci("bbb2222", "2026-08-20")))
+
 
 class TestFindStaleHashes(unittest.TestCase):
     """find_stale_hashes: tabloda olup git log'da olmayan hash'ler."""
