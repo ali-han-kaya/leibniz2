@@ -18,19 +18,20 @@ Vercel Edge/Serverless
 ```
 
 Kural: yerel-yüzeyi taklit etmek yerine repo'nun **tek-kaynak yardımcılarını
-import et** (preview_server.load_history/_project_history_record);
+import et** (preview_server.load_history/\_project_history_record);
 determinism-trend ucu da aynı yolla (determinism_trend_badge) bağlanabilir.
 
 ### Veri-gerçeği (ölçülmüş, 2026-09-23)
 
-| Veri | Konum | Vercel-checkout'unda |
-|---|---|---|
-| determinism_trend.jsonl | `docs/determinism_trend/` — **git'te** (bot haftalık commitler) | VAR |
-| history.jsonl | `_calisma/CIKTI/` — git-DIŞI (yerel çalışma-ürünü) | YOK |
-| runs/ (stdout kayıtları) | `_calisma/CIKTI/runs/` — git-DIŞI | YOK |
-| refs_trend.json | `_calisma/CIKTI/` — git-DIŞI | YOK |
+| Veri                     | Konum                                                           | Vercel-checkout'unda |
+| ------------------------ | --------------------------------------------------------------- | -------------------- |
+| determinism_trend.jsonl  | `docs/determinism_trend/` — **git'te** (bot haftalık commitler) | VAR                  |
+| history.jsonl            | `_calisma/CIKTI/` — git-DIŞI (yerel çalışma-ürünü)              | YOK                  |
+| runs/ (stdout kayıtları) | `_calisma/CIKTI/runs/` — git-DIŞI                               | YOK                  |
+| refs_trend.json          | `_calisma/CIKTI/` — git-DIŞI                                    | YOK                  |
 
 Bu yüzden:
+
 - `/api/run-history` → **GitHub Actions API** (public repo, anonim yetiyor;
   `GITHUB_TOKEN` verilirse rate-limit rahatlar) — canlı koşum-verisi.
 - `/api/trend` → yerel birebir sözleşme; git-dışı veri yokken boş-durum
@@ -66,7 +67,7 @@ deploy'da NOT_FOUND verir (ölçüldü). Python-sürümü `api/.python-version`
 Bundle-küçültme kaldıracı: `vercel.json` →
 `functions["api/*.py"].excludeFiles` — STRING olmalı (brace-expansion:
 `"{a/**,b/**}"`; array → şema-hatası). Ağır-dizinler (.worktrees, apps,
-_calisma/.venv_z3, _calisma/mcp) ve env-dosyaları dışarı: 397.62MB →
+\_calisma/.venv_z3, \_calisma/mcp) ve env-dosyaları dışarı: 397.62MB →
 **656K**. `.vercelignore` yalnız UPLOAD adımını süzer; lokal `vercel build`
 workPath'i doğrudan okur — asıl kaldıraç excludeFiles'tır.
 
@@ -116,15 +117,15 @@ Ortam-değişkeni (opsiyonel): `GITHUB_TOKEN` — GH-API rate-limit için
 JS'in `fetch("/api/...")` çağrıları aynı-origin `/api/*`'a düşer — adaptör
 yolları yerel-uzayla aynı olduğu için **JS-değişikliği GEREKMEZ**.
 
-| URL | Kaynak | Mekanizma |
-|---|---|---|
-| `/` | `_calisma/CIKTI/preview.html` | route (`^/$`) |
-| `/preview.js` | `_calisma/CIKTI/preview.js` | route (`^/preview\.js$`) |
-| `/sw.js` | `_calisma/CIKTI/sw.js` | route (preview.js register eder; 404 → JS `.catch` ile zarfsız devam) |
-| `/design-system/tokens.css` | `design-system/tokens.css` | route YOK — URL == dosya-yolu (filesystem servisi) |
-| `/design-system/stripe-theme.css` | `design-system/stripe/theme.css` | route (yerel mirror kopyası git'te yok) |
-| `/slides_z3/<ad>` | `_calisma/CIKTI/slides_z3/<ad>` | route + `$1` (ad sınıfı `[A-Za-z0-9._-]+`) |
-| `/api/*` | `api/*.py` | **hiçbir route'a yakalanmaz** → dosya-tabanlı fonksiyon |
+| URL                               | Kaynak                           | Mekanizma                                                             |
+| --------------------------------- | -------------------------------- | --------------------------------------------------------------------- |
+| `/`                               | `_calisma/CIKTI/preview.html`    | route (`^/$`)                                                         |
+| `/preview.js`                     | `_calisma/CIKTI/preview.js`      | route (`^/preview\.js$`)                                              |
+| `/sw.js`                          | `_calisma/CIKTI/sw.js`           | route (preview.js register eder; 404 → JS `.catch` ile zarfsız devam) |
+| `/design-system/tokens.css`       | `design-system/tokens.css`       | route YOK — URL == dosya-yolu (filesystem servisi)                    |
+| `/design-system/stripe-theme.css` | `design-system/stripe/theme.css` | route (yerel mirror kopyası git'te yok)                               |
+| `/slides_z3/<ad>`                 | `_calisma/CIKTI/slides_z3/<ad>`  | route + `$1` (ad sınıfı `[A-Za-z0-9._-]+`)                            |
+| `/api/*`                          | `api/*.py`                       | **hiçbir route'a yakalanmaz** → dosya-tabanlı fonksiyon               |
 
 Kurallar — süit `TestVercelStaticFrontendContract` (3 test) bunları sabitler:
 
@@ -171,19 +172,19 @@ yok); yani bu kapı repo'da tek başına yeterli değil, deploy akışı
 python3 -m pytest _calisma/CIKTI/test_vercel_adapter.py -q   # 11/11 (1 canlı-GH-API, ağ-koşullu)
 ```
 
-| Süit-testi | Sözleşme |
-|---|---|
-| handlers_are_basehttprequesthandler_subclasses | 2026 handler-sözleşmesi (4 handler) |
-| api_dir_is_git_tracked | `git ls-files api/` dolu (git-push deploy ön-şartı) |
-| local_health_parity_via_real_http | 200 "ok" düz-metin (gerçek HTTP) |
-| local_trend_parity_via_real_http | {history, refs_trend} yerel birebir |
-| local_determinism_trend_via_real_http | badge + rows (gerçek trend-dosyası) |
-| method_gating_405 | GET-dışı → 405 {"error":...} (health; 405 şablonu 4 handler'da ortak) |
-| run_history_schema_parity | GH-türetimi yerel satır-şeması (+2 ek), ağ-koşullu |
-| no_local_break_api_contract | yerel /api yüzeyi bozulmadı |
-| routes_anchored_and_api_paths_fall_through | route'lar açık-anchor'lı; `/api/*` + filesystem yolları asla yakalanmaz; 5 dest doğru; slayt adları route sınıfında |
-| static_assets_exist_and_survive_vercelignore | mutlak-varlıklar (tokens/stripe/sw/slides) .vercelignore'dan hariç; takipli ise deployment ağacında mevcut |
-| vercelignore_separates_upload_from_bundle | `api/*.py` + canlı-veri jsonl yüklenebilir; `.env`/pptx/primer/stripe-token/node_modules dışarıda |
+| Süit-testi                                     | Sözleşme                                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| handlers_are_basehttprequesthandler_subclasses | 2026 handler-sözleşmesi (4 handler)                                                                                 |
+| api_dir_is_git_tracked                         | `git ls-files api/` dolu (git-push deploy ön-şartı)                                                                 |
+| local_health_parity_via_real_http              | 200 "ok" düz-metin (gerçek HTTP)                                                                                    |
+| local_trend_parity_via_real_http               | {history, refs_trend} yerel birebir                                                                                 |
+| local_determinism_trend_via_real_http          | badge + rows (gerçek trend-dosyası)                                                                                 |
+| method_gating_405                              | GET-dışı → 405 {"error":...} (health; 405 şablonu 4 handler'da ortak)                                               |
+| run_history_schema_parity                      | GH-türetimi yerel satır-şeması (+2 ek), ağ-koşullu                                                                  |
+| no_local_break_api_contract                    | yerel /api yüzeyi bozulmadı                                                                                         |
+| routes_anchored_and_api_paths_fall_through     | route'lar açık-anchor'lı; `/api/*` + filesystem yolları asla yakalanmaz; 5 dest doğru; slayt adları route sınıfında |
+| static_assets_exist_and_survive_vercelignore   | mutlak-varlıklar (tokens/stripe/sw/slides) .vercelignore'dan hariç; takipli ise deployment ağacında mevcut          |
+| vercelignore_separates_upload_from_bundle      | `api/*.py` + canlı-veri jsonl yüklenebilir; `.env`/pptx/primer/stripe-token/node_modules dışarıda                   |
 
 ### Aylık canlı doğrulama job'ı (`vercel-deploy-check.yml`)
 
@@ -224,7 +225,7 @@ raporlayamaz (sessiz bayat alias yok).
   (`vercel_latest_preview.py`) için gereklidir; normal yolda API'ye hiç
   gidilmez.
 - **Ölçüm (2026-10-25):** `vercel alias set` + `check_vercel_deploy.py
-  --base-url https://leibniz2-preview.vercel.app` → `VERDICT: PASS`
+--base-url https://leibniz2-preview.vercel.app` → `VERDICT: PASS`
   (health `ok`, run-history 15 satır, slayt PNG 5131 bayt); ardından
   `vercel-deploy-check` `workflow_dispatch` koşumu **success**, logda
   `VERDICT: PASS — https://leibniz2-preview.vercel.app` (repo variable yolu
@@ -312,12 +313,12 @@ Token'ı **`sarkis-env` takımının üyesi olan hesaptan** oluştur ve token'ı
 takıma kapsamla. Proje `sarkis-env/leibniz2` altında; workflow sabit olarak
 `--project leibniz2 --scope sarkis-env` kullanıyor.
 
-| Adım | Değer |
-|---|---|
-| Hesap | `sarkis-env` üyesi (owner/member) olan Vercel kullanıcısı |
-| Scope | `sarkis-env` · **All Projects** (daraltmak istersen yalnız `leibniz2`) |
-| Secret | repo → Settings → Secrets and variables → Actions → `VERCEL_TOKEN` |
-| Hedef | `✓ Linked sarkis-env/leibniz2` |
+| Adım   | Değer                                                                  |
+| ------ | ---------------------------------------------------------------------- |
+| Hesap  | `sarkis-env` üyesi (owner/member) olan Vercel kullanıcısı              |
+| Scope  | `sarkis-env` · **All Projects** (daraltmak istersen yalnız `leibniz2`) |
+| Secret | repo → Settings → Secrets and variables → Actions → `VERCEL_TOKEN`     |
+| Hedef  | `✓ Linked sarkis-env/leibniz2`                                         |
 
 **Neden:** `--scope` yetki **vermez, seçer**. Erişimi token'ın kapsamı belirler;
 Vercel üç kapsam tanır — Full Account (kişisel + üye olunan takımlar), Team
@@ -338,22 +339,52 @@ Resmî açıklama ([vercel/vercel errors](https://github.com/vercel/vercel/blob/
 `--scope` ile verilen takımın **üyesi değilsin**, sahibi olmadığın bir kullanıcı
 hesabını gösterdin ya da token geçersiz/süresi geçmiş. Ayırt etme tablosu:
 
-| Belirti | Anlamı | Kontrol |
-|---|---|---|
-| `scope-not-accessible` | scope üyeliği yok / token geçersiz | `vercel switch` çıktısında o scope **yok** → takım üyeliği |
-| HTTP **401** | token geçersiz veya süresi dolmuş | `GET /v2/user` |
-| HTTP **403** | token geçerli, kapsamı yetmiyor | `GET /v2/teams`, `GET /v10/projects?teamId=…` |
-| `Project not found` | yanlış proje adı/ID'si veya yanlış takım | `--project` / `VERCEL_PROJECT_ID` eşleşmesi |
-| `No project linked` | `.vercel/` bağı yok ve ID'ler verilmemiş | `vercel link` ya da iki ID ortam değişkeni |
+| Belirti                               | Anlamı                                                            | Kontrol                                                    |
+| ------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| `scope-not-accessible`                | scope üyeliği yok / token geçersiz                                | `vercel switch` çıktısında o scope **yok** → takım üyeliği |
+| HTTP **401**                          | token geçersiz veya süresi dolmuş                                 | `GET /v2/user`                                             |
+| HTTP **403** + `"invalidToken": true` | **token ölü** (üretildiği hesap silinmiş / iptal / süresi dolmuş) | `GET /v2/user` → gövdedeki bayrak                          |
+| HTTP **403**, `invalidToken` yok      | token geçerli, kapsamı yetmiyor                                   | `GET /v2/teams`, `GET /v10/projects?teamId=…`              |
+| `Project not found`                   | yanlış proje adı/ID'si veya yanlış takım                          | `--project` / `VERCEL_PROJECT_ID` eşleşmesi                |
+| `No project linked`                   | `.vercel/` bağı yok ve ID'ler verilmemiş                          | `vercel link` ya da iki ID ortam değişkeni                 |
 
 Doğrulama — token'ı loga **yazmadan**:
 
 ```bash
 vercel whoami && vercel teams ls && vercel switch
+curl -s -o /tmp/u.json -w '%{http_code}\n' \
+  -H "Authorization: Bearer $VERCEL_TOKEN" https://api.vercel.com/v2/user
+# 200 → token canlı (kapsamı yine de /v2/teams ile doğrula)
+# 403 + {"error":{"invalidToken":true}} → token ÖLÜ
+# 403 bayraksız → token canlı, kapsamı yetmiyor
+# 401 → token ölü
 curl -s -o /dev/null -w '%{http_code}\n' \
   -H "Authorization: Bearer $VERCEL_TOKEN" https://api.vercel.com/v2/teams
-# 200: kapsam görünüyor · 403: kapsam yetmiyor · 401: token ölü
+# 200: kapsam görünüyor · 403: kapsam yetmiyor
 ```
+
+**Ölçüm notu (2026-10-26):** ölü token'a Vercel **401 değil** `403` +
+`{"error":{"code":"forbidden","message":"Invalid token","invalidToken":true}}`
+dönüyor. Yani durum kodu tek başına "ölü token" ile "kapsam yetersiz"i
+ayırmaz; ayrım gövdedeki `invalidToken` bayrağındadır.
+
+### Kapsam ön kontrolü — workflow'da (fail-closed)
+
+`vercel-preview-deploy.yml` link adımından **önce** `Token kapsami on
+kontrolu (fail-closed)` adımını koşar; böylece teşhis `scope-not-accessible`
+logunun yorumuna kalmaz, adım hatayı adıyla söyler:
+
+| Ölçüm (`GET /v2/user`)           | Verdict      | Çıktı                                                                  |
+| -------------------------------- | ------------ | ---------------------------------------------------------------------- |
+| 200                              | `ok`         | devam — sonra `/v2/teams` içinde `sarkis-env` aranır                   |
+| 403 `invalidToken:true` veya 401 | `invalid`    | "token geçersiz veya süresi dolmuş" → token'ı yeniden üret             |
+| 403 (bayraksız)                  | `scope`      | "geçerli ama kapsamı yetmiyor" → kapsamı `sarkis-env`/Full Account yap |
+| diğer (5xx, ağ, boş gövde)       | `unmeasured` | "ön kontrol ölçülemedi" → KIRMIZI (sessiz PASS yok)                    |
+
+`/v2/teams` 200 dönmezse ya da dönen listede `sarkis-env` yoksa adım yine
+düşer (project-only token kullanıcı/takım uçlarına erişemez). Token hiçbir
+yere yazılmaz: loga yalnız HTTP durum kodu, `invalidToken` bayrağı ve görünen
+takım adları çıkar.
 
 ### Rotasyon — tam sıra
 

@@ -1599,6 +1599,33 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(name, value)
         super().end_headers()
 
+    # HEAD yanıtının Content-Type'ı ROTADAN türetilir — sabit text/plain
+    # DEĞİL. Ölçülen olay (2026-10-26): `HEAD /design-system/tokens.css?v=1`
+    # `text/plain; charset=utf-8` dönüyordu, aynı yolun GET'i
+    # `text/css; charset=utf-8`. `X-Content-Type-Options: nosniff` altında bu
+    # bir MIME arızasıdır: HEAD'i GET'in "başlıkları, gövdesiz" sözleşmesi
+    # diye okuyan istemciler (tarayıcı ön-yükleme sondayıcıları, WebDriver
+    # oturumları, e2e ön-uçuşları) stil dosyasını text/plain sanıp reddeder.
+    _ROUTE_CONTENT_TYPES = {
+        "preview": "text/html; charset=utf-8",
+        "guide": "text/html; charset=utf-8",
+        "landing": "text/html; charset=utf-8",
+        "preview_js": "application/javascript; charset=utf-8",
+        "sw": "application/javascript; charset=utf-8",
+        "design_tokens": "text/css; charset=utf-8",
+        "slides": "image/png",
+        "landing_assets": "image/png",
+        "sse": "text/event-stream; charset=utf-8",
+    }
+
+    def _head_content_type(self, route):
+        """HEAD için GET'in Content-Type'ı (JSON API'leri dahil)."""
+        if route in self._ROUTE_CONTENT_TYPES:
+            return self._ROUTE_CONTENT_TYPES[route]
+        if route is None:
+            return "text/plain; charset=utf-8"   # 404 gövdesi
+        return "application/json; charset=utf-8"
+
     def do_HEAD(self):
         # HEAD = GET'in başlıkları, gövdesiz (route tablosunu yeniden
         # kullanır; _route None döndürürse 404).
@@ -1607,8 +1634,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "404 not found")
             return
         # Bilişli kısayol: gövde yazılmaz — tek amaç başlıkları teşhir.
+        # Content-Type GET ile AYNI olmalı (MIME paritesi).
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", self._head_content_type(route))
         self.end_headers()
 
     def log_message(self, fmt, *args):
@@ -2106,17 +2134,31 @@ class Handler(BaseHTTPRequestHandler):
 
         Gerçek kaynak: <repo>/design-system/tokens.css (check_tokens.py'in
         tek-kaynak sözleşmesi). update_preview.sh/sync_verify_mirror.sh bunu
-        mirror PREVIEW_DIR'e design-system-tokens.css adıyla taşır; mirror'da
-        yoksa 404 (fail-closed — tokensız sayfa tarayıcı varsayılanına düşer).
+        mirror PREVIEW_DIR'e design-system-tokens.css adıyla taşır; mirror
+        yoksa DOĞRUDAN repo kaynağına düşülür.
+
+        MIME arızası (ölçüldü 2026-10-26): mirror gitignored olduğu için temiz
+        checkout'ta yoktur; eski davranış bu rotada 404 + `text/plain`
+        dönüyordu. `X-Content-Type-Options: nosniff` altında tarayıcı stil
+        dosyasını reddedip `Refused to apply style … MIME type ('text/plain')`
+        konsol hatası basıyordu — pano stilsiz kalıyor, playwright smoke'u
+        (`test_dashboard_renders_with_no_js_console_errors`) kırmızıya
+        düşüyordu. Tek-kaynak dosya HER checkout'ta bulunduğu için fallback
+        o sınıfı kaynağında kapatır; 404 yalnızca dosyanın gerçekten hiç
+        olmadığı kurulumda kalır (o zaman fail-closed gürültüsü korunur,
+        sessizce stilsiz sayfa servis edilmez).
         """
-        path = os.path.join(PREVIEW_DIR, "design-system-tokens.css")
-        if not os.path.isfile(path):
-            self._send(404, "404 — design-system/tokens.css mirror'da yok "
-                            "(bash update_preview.sh --force)")
+        candidates = (os.path.join(PREVIEW_DIR, "design-system-tokens.css"),
+                      os.path.join(REPO_ROOT, "design-system", "tokens.css"))
+        for path in candidates:
+            if not os.path.isfile(path):
+                continue
+            with open(path, encoding="utf-8") as f:
+                css = f.read()
+            self._send(200, css, content_type="text/css; charset=utf-8")
             return
-        with open(path, encoding="utf-8") as f:
-            css = f.read()
-        self._send(200, css, content_type="text/css; charset=utf-8")
+        self._send(404, "404 — design-system/tokens.css kaynağı yok "
+                        "(mirror: bash update_preview.sh --force)")
 
     def serve_sw(self):
         """Service worker — Freebuff Electron webview cache bypass.

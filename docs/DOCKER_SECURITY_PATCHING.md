@@ -41,16 +41,16 @@ tablosunda tanımlıdır.
 
 ## Kapı zinciri — üç uygulama katmanı
 
-Aşağıdaki "Üç katman" tablosu **paket** zinciridir (apt/pip/npm): *neyin*
-yamandığını söyler. Bu tablo ise **zorlama** zinciridir: *deseni kim, ne
-zaman uygular*. İkisi karıştırılmamalıdır — biri dosya/içerik yüzeyi,
+Aşağıdaki "Üç katman" tablosu **paket** zinciridir (apt/pip/npm): _neyin_
+yamandığını söyler. Bu tablo ise **zorlama** zinciridir: _deseni kim, ne
+zaman uygular_. İkisi karıştırılmamalıdır — biri dosya/içerik yüzeyi,
 öteki kapı tetiklemesidir.
 
-| # | Kapı | Nerede tanımlı | Ne zaman koşar | Fail-closed kanıtı |
-|---|---|---|---|---|
-| 1 | **Smoke** — build + Trivy gate + canlı sağlık | CI: `docker-security.yml` → `smoke` job (`timeout-minutes: 30`). Yerel ikizi: `check-docker-security-smoke` (`bash _calisma/CIKTI/docker_security_smoke.sh`) | CI'da push + cron + `workflow_dispatch`; yerel ikiz yalnız `Dockerfile` stage'liyken | Kanıt dosyasında `verdict=PASS` yoksa `Assert real run` adımı `exit 1` — SKIP kanıt sayılmaz. Build/Trivy/sağlık hatasında script rc=1 |
-| 2 | **Patching** — yama-desen sözleşmesi | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: (^|/)Dockerfile$`, `pass_filenames: false`) | Herhangi bir yolda `Dockerfile` stage'liyken (`always_run` yok — nedensel sinyal korunur) | Sözleşme satırı bozulursa test fail → commit blok. Kapsam dışı Dockerfile varsa `test_no_uncovered_dockerfile` da fail eder. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
-| 3 | **Cron** — zamanlanmış tazeleme | `docker-security.yml` → `on.schedule: "43 3 * * 1"` | Pazartesi 03:43 UTC, push tetiklemesi olmadan | Hazırlıksız çıkan CVE'yi yakalar; koşum kaydına yazılır, sapma tablosu yönlendirir |
+| #   | Kapı                                          | Nerede tanımlı                                                                                                                                               | Ne zaman koşar                                                                       | Fail-closed kanıtı                                                                                                                     |
+| --- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Smoke** — build + Trivy gate + canlı sağlık | CI: `docker-security.yml` → `smoke` job (`timeout-minutes: 30`). Yerel ikizi: `check-docker-security-smoke` (`bash _calisma/CIKTI/docker_security_smoke.sh`) | CI'da push + cron + `workflow_dispatch`; yerel ikiz yalnız `Dockerfile` stage'liyken | Kanıt dosyasında `verdict=PASS` yoksa `Assert real run` adımı `exit 1` — SKIP kanıt sayılmaz. Build/Trivy/sağlık hatasında script rc=1 |
+| 2   | **Patching** — yama-desen sözleşmesi          | `check-dockerfile-security-patching` (`python3 -m unittest _calisma.CIKTI.test_dockerfile_security_patching`, `files: (^                                     | /)Dockerfile$`, `pass_filenames: false`)                                             | Herhangi bir yolda `Dockerfile` stage'liyken (`always_run` yok — nedensel sinyal korunur)                                              | Sözleşme satırı bozulursa test fail → commit blok. Kapsam dışı Dockerfile varsa `test_no_uncovered_dockerfile` da fail eder. Dosya manifest'te yer aldığı için `check-unit-tests` de koşar |
+| 3   | **Cron** — zamanlanmış tazeleme               | `docker-security.yml` → `on.schedule: "43 3 * * 1"`                                                                                                          | Pazartesi 03:43 UTC, push tetiklemesi olmadan                                        | Hazırlıksız çıkan CVE'yi yakalar; koşum kaydına yazılır, sapma tablosu yönlendirir                                                     |
 
 Kapı 1 ve 2 **yerelde**, kapı 3 **uzakta** koşar; üçü de aynı yüzeye bakar
 (`Dockerfile` + smoke scripti) ve üçü de sessiz geçişe kapalıdır: 1 ve 2
@@ -104,10 +104,10 @@ ayırmadığı için eşleştirilmez — o sınıf `UNKNOWN` kalır.
 İki pre-commit kapısı aynı dosyaya bakar ama **eşleşme kalıpları
 farklıdır**:
 
-| Kapı | `files:` | `pass_filenames` | Sonuç |
-|---|---|---|---|
-| `check-docker-security-smoke` | `Dockerfile` — kök değil, yolun herhangi bir yerinde eşleşir | belirtilmemiş (varsayılan) | Alt dizinde bir `Dockerfile` da tam build+scan'i tetikler |
-| `check-dockerfile-security-patching` | `(^|/)Dockerfile$` — kök **ve** kök altı | `false` | Herhangi bir yolda `Dockerfile` sözleşmeyi tetikler |
+| Kapı                                 | `files:`                                                     | `pass_filenames`                     | Sonuç                                                     |
+| ------------------------------------ | ------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------- | --------------------------------------------------- |
+| `check-docker-security-smoke`        | `Dockerfile` — kök değil, yolun herhangi bir yerinde eşleşir | belirtilmemiş (varsayılan)           | Alt dizinde bir `Dockerfile` da tam build+scan'i tetikler |
+| `check-dockerfile-security-patching` | `(^                                                          | /)Dockerfile$` — kök **ve** kök altı | `false`                                                   | Herhangi bir yolda `Dockerfile` sözleşmeyi tetikler |
 
 **Boşluk (ölçüldü, kapandı).** Patching kapısı `^Dockerfile$` iken ikinci bir
 `Dockerfile` eklenmesi onu tamamen kapsam dışı bırakıyordu: ne hook
@@ -125,18 +125,18 @@ dışı bildirilir.
 
 ## Üç katman
 
-| Katman | Nerede | Ne zaman | Desen |
-|---|---|---|---|
-| Sistem paketleri (apt) | Dockerfile runtime stage, `SECURITY_PATCH_PACKAGES` ARG | Debian kütüphane CVE'leri (ör. libpcre2-8-0) | `--only-upgrade <pkg>=<floor>`, `--no-install-recommends`, liste temizliği, kurulan sürüm kanıta yazılır |
-| Python zinciri (pip) | builder + runtime stage'lerde `PYTHON_SECURITY_PATCH_PACKAGES` ARG (global default + bare redeclare) | setuptools/wheel gibi image'e taşınan Python paketi CVE'leri | `--upgrade $PYTHON_SECURITY_PATCH_PACKAGES` — floor'lar ARG default'ında, asla floorsuz |
-| Node zinciri (npm) | `apps/*/package.json` (`dependencies` + `overrides`) + `package-lock.json`; **tarama yüzeyi** `.dockerignore` | image'e girebilecek JS bağımlılığı CVE'leri (postcss/sharp/next) | `overrides` floor'ları (`^` = `>=`) + commit'lenmiş lockfile + context hijyeni |
+| Katman                 | Nerede                                                                                                        | Ne zaman                                                         | Desen                                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Sistem paketleri (apt) | Dockerfile runtime stage, `SECURITY_PATCH_PACKAGES` ARG                                                       | Debian kütüphane CVE'leri (ör. libpcre2-8-0)                     | `--only-upgrade <pkg>=<floor>`, `--no-install-recommends`, liste temizliği, kurulan sürüm kanıta yazılır |
+| Python zinciri (pip)   | builder + runtime stage'lerde `PYTHON_SECURITY_PATCH_PACKAGES` ARG (global default + bare redeclare)          | setuptools/wheel gibi image'e taşınan Python paketi CVE'leri     | `--upgrade $PYTHON_SECURITY_PATCH_PACKAGES` — floor'lar ARG default'ında, asla floorsuz                  |
+| Node zinciri (npm)     | `apps/*/package.json` (`dependencies` + `overrides`) + `package-lock.json`; **tarama yüzeyi** `.dockerignore` | image'e girebilecek JS bağımlılığı CVE'leri (postcss/sharp/next) | `overrides` floor'ları (`^` = `>=`) + commit'lenmiş lockfile + context hijyeni                           |
 
 Aynı üç kural üç katmanda da geçerli (npm karşılıkları parantez içinde):
 
 1. **Yalnız etkilenen paket** — genel `upgrade`/`dist-upgrade` yapılmaz; taban
    sürümü değişmez, diff yüzeyi küçük kalır, davranış kayması ölçülebilir olur.
    (npm: yalnız ilgili `overrides` girdisi / doğrudan pin; `npm audit fix
-   --force` tüm ağacı yeniden yazar — yasak.)
+--force` tüm ağacı yeniden yazar — yasak.)
 2. **Floor minimumdur, pin maksimum değildir** — `>=`/`=` floor'ları yalnız
    en düşük yamalı sürümü zorlar; base image daha yenisini taşıyorsa o
    kullanılır (yamalar birikir, sürümler geri gitmez). (npm: `^8.5.18` de
@@ -171,10 +171,10 @@ context sözleşmesi + sürüm floor'larıdır, image taraması değil.
 
 ### Önce iki hata sınıfını ayır
 
-| Sınıf | Belirti | Kök neden | Düzeltme |
-|---|---|---|---|
-| Context sızıntısı | Bulgu var, **aynı commit CI'da hiç görünmüyor** | Host artefaktı build context'e sızdı: `.worktrees/`'daki bayat lock + `node_modules`, `.venv_z3` | `.dockerignore` hijyeni (kurallar aşağıda) — **sürüm yükseltme değil** |
-| Gerçek sürüm bulgusu | Bulgu, image'e girebilecek pakete ait | Paketin yamalı sürümü floor'un altında | `dependencies`/`overrides` floor'u + lockfile |
+| Sınıf                | Belirti                                         | Kök neden                                                                                        | Düzeltme                                                               |
+| -------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Context sızıntısı    | Bulgu var, **aynı commit CI'da hiç görünmüyor** | Host artefaktı build context'e sızdı: `.worktrees/`'daki bayat lock + `node_modules`, `.venv_z3` | `.dockerignore` hijyeni (kurallar aşağıda) — **sürüm yükseltme değil** |
+| Gerçek sürüm bulgusu | Bulgu, image'e girebilecek pakete ait           | Paketin yamalı sürümü floor'un altında                                                           | `dependencies`/`overrides` floor'u + lockfile                          |
 
 2026-09-20 ölçümü (yerel canlı smoke, Trivy 0.74.0): ilk koşum **4 HIGH** —
 postcss ×2 (CVE-2026-45623, CVE-2026-73646) + sharp ×2 (GHSA-f88m-g3jw-g9cj,
@@ -207,11 +207,11 @@ yanlış teşhistir (o commit'te kapı yine kırmızı kalır).
 
 ### `overrides` deseni
 
-| Durum | Alan | Örnek |
-|---|---|---|
-| Doğrudan bağımlılık | `dependencies` | `next`: floor **15.5.15** (GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3) — taban yükselince `^16.x` olabilir, floor geri gitmez |
-| Geçişli (transitive) bağımlılık | `overrides` | `postcss: ^8.5.18`, `sharp: ^0.35.4` |
-| Uygulanmış hâli (kanıt) | `package-lock.json` | `npm ci` CI'da aynı ağacı kurar |
+| Durum                           | Alan                | Örnek                                                                                                                       |
+| ------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Doğrudan bağımlılık             | `dependencies`      | `next`: floor **15.5.15** (GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3) — taban yükselince `^16.x` olabilir, floor geri gitmez |
+| Geçişli (transitive) bağımlılık | `overrides`         | `postcss: ^8.5.18`, `sharp: ^0.35.4`                                                                                        |
+| Uygulanmış hâli (kanıt)         | `package-lock.json` | `npm ci` CI'da aynı ağacı kurar                                                                                             |
 
 - **Lockfile commit'lenir ve kanıttır:** floor'un gerçekten uygulandığının
   tek kanıtı `package-lock.json`'daki çözümlenmiş sürümlerdir (`npm ci`
@@ -228,11 +228,11 @@ yanlış teşhistir (o commit'te kapı yine kırmızı kalır).
 
 ### npm-CVE-defteri
 
-| Paket | Advisory/CVE | Floor | Kanıt |
-|---|---|---|---|
-| next | GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3 | 15.5.15 | 2026-09-20 gerçek sürüm bulgusu (image'e girecek paket) → `dependencies` floor'u + lock; ikinci koşum `trivy_findings=0` (Clean), `verdict=PASS` |
-| postcss | CVE-2026-45623, CVE-2026-73646 | `^8.5.18` (çözülen 8.5.28) | 2026-09-20 `.worktrees` sızıntısı (bayat lock 8.4.31) → `.dockerignore` `**/node_modules` + `overrides`; `npm audit` 0 bulgu |
-| sharp | GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c | `^0.35.4` | aynı koşum, aynı sınıf (bayat lock 0.34.5) |
+| Paket   | Advisory/CVE                             | Floor                      | Kanıt                                                                                                                                            |
+| ------- | ---------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| next    | GHSA-mwv6-3258-q52c, GHSA-q4gf-8mx6-v5v3 | 15.5.15                    | 2026-09-20 gerçek sürüm bulgusu (image'e girecek paket) → `dependencies` floor'u + lock; ikinci koşum `trivy_findings=0` (Clean), `verdict=PASS` |
+| postcss | CVE-2026-45623, CVE-2026-73646           | `^8.5.18` (çözülen 8.5.28) | 2026-09-20 `.worktrees` sızıntısı (bayat lock 8.4.31) → `.dockerignore` `**/node_modules` + `overrides`; `npm audit` 0 bulgu                     |
+| sharp   | GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c | `^0.35.4`                  | aynı koşum, aynı sınıf (bayat lock 0.34.5)                                                                                                       |
 
 Yeni girdiler buraya ve `package.json`'ın `overrides` bloğuna eklenir.
 
@@ -258,14 +258,14 @@ tablosuna geçilir.
 ortama bağlıdır; ikisi de exit 0'dır ve ikisi de "kanıt" üretir — ama
 farklı miktarda:
 
-| | SKIP modu (araç yok) | Gerçek koşum (CI'daki beklenti) |
-|---|---|---|
-| Tetikleyici | PATH'te docker **veya** trivy yok | `Install Trivy` adımı çalıştı |
-| Çıkış kodu | 0 | 0 |
-| Log satırı | 3 | ~15 |
-| Kanıt satırları | `trivy=`, `verdict=` **yok** | `trivy=<sürüm>`, `trivy_findings=0`, `verdict=PASS` |
-| Sağlık zinciri | yok (koşulmadı) | `health_http=200` + `container_health=healthy` |
-| Nerede yaşar | Trivy'siz yerel makine | cron + push koşumu |
+|                 | SKIP modu (araç yok)              | Gerçek koşum (CI'daki beklenti)                     |
+| --------------- | --------------------------------- | --------------------------------------------------- |
+| Tetikleyici     | PATH'te docker **veya** trivy yok | `Install Trivy` adımı çalıştı                       |
+| Çıkış kodu      | 0                                 | 0                                                   |
+| Log satırı      | 3                                 | ~15                                                 |
+| Kanıt satırları | `trivy=`, `verdict=` **yok**      | `trivy=<sürüm>`, `trivy_findings=0`, `verdict=PASS` |
+| Sağlık zinciri  | yok (koşulmadı)                   | `health_http=200` + `container_health=healthy`      |
+| Nerede yaşar    | Trivy'siz yerel makine            | cron + push koşumu                                  |
 
 İki mod da ölçülerek karşılaştırıldı:
 
@@ -337,16 +337,16 @@ yüzden `cat ... || echo` fallback'i devreye girmez; fallback ancak script
 
 ### Sapma tablosu
 
-| Gözlenen | Anlamı | Yapılacak |
-|---|---|---|
-| `verdict=PASS` + `OK: verdict=PASS …` | Beklenen koşum; cron canlı ve gerçek kanıt üretti | Kayıt satırına yaz, sapma yok |
-| `smoke` job **fail** (assert kırmızı) | Trivy kurulum adımı çalışmadı — SKIP'e düşüldü ya da script erken çıktı | `Install Trivy` adımının log'unu oku: sha256 uyuşmazlığı / ağ hatası. `sha256sum -c` çıktısını oku; `TRIVY_VERSION` + `TRIVY_SHA256` değerlerini release'in `trivy_<sürüm>_checksums.txt` dosyasıyla karşılaştır |
+| Gözlenen                                        | Anlamı                                                                                                                                                                                          | Yapılacak                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verdict=PASS` + `OK: verdict=PASS …`           | Beklenen koşum; cron canlı ve gerçek kanıt üretti                                                                                                                                               | Kayıt satırına yaz, sapma yok                                                                                                                                                                                                                                                                                                                  |
+| `smoke` job **fail** (assert kırmızı)           | Trivy kurulum adımı çalışmadı — SKIP'e düşüldü ya da script erken çıktı                                                                                                                         | `Install Trivy` adımının log'unu oku: sha256 uyuşmazlığı / ağ hatası. `sha256sum -c` çıktısını oku; `TRIVY_VERSION` + `TRIVY_SHA256` değerlerini release'in `trivy_<sürüm>_checksums.txt` dosyasıyla karşılaştır                                                                                                                               |
 | `SKIP: trivy yok` logda **1 kez veya daha çok** | Kurulum sessizce bozuldu: Trivy gelmedi, yani **güvenlik gate'i hiç koşmadı**. Assert adımı bunu kırmızıya çevirir, ama sebebi SKIP'tir — `smoke` job'ının kızarması tek başına nedeni söylemez | Önce say: `gh run view <id> --log \| grep -c 'SKIP: trivy yok'`. `0` değilse koşum kanıt değildir, kayıt satırına **başarısız** yaz. Sonra `Install Trivy` adımına dön: `trivy.tgz: OK` ve `Version:` satırları yoksa kurulum adımı; `sha256sum -c` `FAILED` verdiyse `TRIVY_SHA256` sürümün `trivy_<sürüm>_checksums.txt` değeriyle uyuşmuyor |
-| `smoke` job fail, `verdict=FAIL` | Gerçek ihlal: build / Trivy bulgusu / sağlık (fail-closed çalıştı) | `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` kanıtını oku, bulguları "Katkı sözleşmesi" ile kapat, `docs/CI_GATE_TRIAGE.md`'ye kaydet |
-| `Show smoke evidence` fallback notunu basıyor | Script `log()`'a ulaşmadan çöktü — hiç kanıt üretilmedi | Elle koşum log'unu oku; çökme noktası smoke adımına teşhis olarak eklenmeli |
-| `trivy=` satırında beklenmeyen sürüm | `TRIVY_VERSION` ile `image-scan`'in motoru ayrışmış — iki job farklı motorla tarar, kapılar çelişebilir | Sürümü `trivy-action@v0.35.0` varsayılanıyla eşitle; parite bu eşitlikle korunur |
-| `image-scan` job kırmızı | Cron'un **asıl** amacı gerçekleşti: CRITICAL/HIGH bulgu | Aynı Katkı sözleşmesi; `severity: CRITICAL,HIGH` + `ignore-unfixed` + `exit-code 1` sözleşmesi bozulmadıysa bu beklenen davranıştır |
-| Ohafta hiç `docker-security` run yok | GitHub scheduler çalışmıyor (60 gün hareketsizlik politikası) ya da path filtresi | `gh run list --workflow docker-security.yml` ile doğrula; run yoksa `workflow_dispatch` ile elle koşup scheduler'ı canlandır |
+| `smoke` job fail, `verdict=FAIL`                | Gerçek ihlal: build / Trivy bulgusu / sağlık (fail-closed çalıştı)                                                                                                                              | `docs/ci_simulate/docker_security_smoke/docker_security_smoke_report.txt` kanıtını oku, bulguları "Katkı sözleşmesi" ile kapat, `docs/CI_GATE_TRIAGE.md`'ye kaydet                                                                                                                                                                             |
+| `Show smoke evidence` fallback notunu basıyor   | Script `log()`'a ulaşmadan çöktü — hiç kanıt üretilmedi                                                                                                                                         | Elle koşum log'unu oku; çökme noktası smoke adımına teşhis olarak eklenmeli                                                                                                                                                                                                                                                                    |
+| `trivy=` satırında beklenmeyen sürüm            | `TRIVY_VERSION` ile `image-scan`'in motoru ayrışmış — iki job farklı motorla tarar, kapılar çelişebilir                                                                                         | Sürümü `trivy-action@v0.35.0` varsayılanıyla eşitle; parite bu eşitlikle korunur                                                                                                                                                                                                                                                               |
+| `image-scan` job kırmızı                        | Cron'un **asıl** amacı gerçekleşti: CRITICAL/HIGH bulgu                                                                                                                                         | Aynı Katkı sözleşmesi; `severity: CRITICAL,HIGH` + `ignore-unfixed` + `exit-code 1` sözleşmesi bozulmadıysa bu beklenen davranıştır                                                                                                                                                                                                            |
+| Ohafta hiç `docker-security` run yok            | GitHub scheduler çalışmıyor (60 gün hareketsizlik politikası) ya da path filtresi                                                                                                               | `gh run list --workflow docker-security.yml` ile doğrula; run yoksa `workflow_dispatch` ile elle koşup scheduler'ı canlandır                                                                                                                                                                                                                   |
 
 Değişmez kural: **SKIP bir hata değildir, ama CI'da kanıt da değildir.**
 SKIP'i "düzeltilecek sorun" sanıp betiği gevşetmek yerine, kurulumu
@@ -360,11 +360,11 @@ davranıştır.
 Cron'un ilk Pazartesi koşumu bittikten sonra **ilk satır** doldurulur. O
 satır boş kaldığı sürece cron'un zamanlanmış koşumu doğrulanmamıştır.
 
-| Koşum (run id) | Tetikleyici | Beklenen | Gözlenen | Sonuç |
-|---|---|---|---|---|
-| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | `schedule` | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` **+ `SKIP: trivy yok` 0 kez** | — | — |
-| `36799425906` | `workflow_dispatch` (elle) | gerçek koşum | `trivy.tgz: OK` · `Version: 0.69.3` · `trivy=0.69.3` · `trivy_findings=0` · `trivy_clean=Clean` · `health_http=200` · `container_health=healthy` · `verdict=PASS` · `OK: verdict=PASS …` · **`SKIP: trivy yok` 0 kez** | ✅ |
-| `36791434082` | `push` (PR #62) | gerçek koşum | `verdict=PASS`, 0 bulgu, health 200/healthy | ✅ |
+| Koşum (run id)                            | Tetikleyici                | Beklenen                                                                          | Gözlenen                                                                                                                                                                                                               | Sonuç |
+| ----------------------------------------- | -------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| (henüz koşmadı — ilk Pazartesi 03:43 UTC) | `schedule`                 | gerçek koşum: `verdict=PASS` + `OK: verdict=PASS …` **+ `SKIP: trivy yok` 0 kez** | —                                                                                                                                                                                                                      | —     |
+| `36799425906`                             | `workflow_dispatch` (elle) | gerçek koşum                                                                      | `trivy.tgz: OK` · `Version: 0.69.3` · `trivy=0.69.3` · `trivy_findings=0` · `trivy_clean=Clean` · `health_http=200` · `container_health=healthy` · `verdict=PASS` · `OK: verdict=PASS …` · **`SKIP: trivy yok` 0 kez** | ✅    |
+| `36791434082`                             | `push` (PR #62)            | gerçek koşum                                                                      | `verdict=PASS`, 0 bulgu, health 200/healthy                                                                                                                                                                            | ✅    |
 
 **Elle koşum ne kanıtlar, ne kanıtlamaz.** `workflow_dispatch` aynı
 workflow'u, aynı job'ı, aynı runner imajıyla çalıştırır — bu yüzden gerçek
@@ -387,11 +387,11 @@ gh run list --workflow docker-security.yml --event workflow_dispatch
 o run'un logu üç şeyi birden kanıtlar — gerçek koşumun kendisi, SKIP
 olmadığı ve motor paritesi. Kabul ölçütü **üçünün birden** tutmasıdır:
 
-| # | Ölçüm | Beklenen | Neden ayrı ölçüm |
-|---|---|---|---|
-| 1 | `grep -c 'OK: verdict=PASS'` | `1` | Gerçek koşumun çıktı adımı yeşil olduğunu kanıtlar |
-| 2 | `grep -c 'SKIP: trivy yok'` | `0` | SKIP modu **exit 0** ve "kanıt" üretir; yalnız yeşil job bunu ele vermez |
-| 3 | `grep -o 'trivy=[0-9.]*'` ↔ `TRIVY_VERSION` | eşit | `image-scan` ile aynı motor |
+| #   | Ölçüm                                        | Beklenen | Neden ayrı ölçüm                                                         |
+| --- | -------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| 1   | `grep -c 'OK: verdict=PASS'`                 | `1`      | Gerçek koşumun çıktı adımı yeşil olduğunu kanıtlar                       |
+| 2   | `grep -c 'SKIP: trivy yok'`                  | `0`      | SKIP modu **exit 0** ve "kanıt" üretir; yalnız yeşil job bunu ele vermez |
+| 3   | `grep -o 'trivy=[0-9.]*'` ↔ `TRIVY_VERSION` | eşit     | `image-scan` ile aynı motor                                              |
 
 2 numaralı ölçümün ayrı olmasının sebebi: SKIP modu da başarılıdır. Script
 SKIP'te de kanıt dosyasını üretir (başlık + `image=`), yalnız güvenlik
@@ -427,10 +427,10 @@ K6 (`trivy=<sürüm>` ↔ `TRIVY_VERSION`) yalnız workflow ↔ runbook eşleşm
 zorlar; iki job'ın **gerçekten aynı motorla** taradığını koşum kanıtı
 doğrular. `36799425906`'de ölçüldü:
 
-| Job | Trivy sürümü | Kaynak |
-|---|---|---|
+| Job          | Trivy sürümü       | Kaynak                                                         |
+| ------------ | ------------------ | -------------------------------------------------------------- |
 | `image-scan` | `version: v0.69.3` | `trivy-action@v0.35.0` → `setup-trivy` (action'ın varsayılanı) |
-| `smoke` | `Version: 0.69.3` | `Install Trivy` adımı, sha256 doğrulamalı |
+| `smoke`      | `Version: 0.69.3`  | `Install Trivy` adımı, sha256 doğrulamalı                      |
 
 Aynı koşumun logu ayrıca "current version is 0.69.3" diyerek bunu teyit
 eder. Kapı iki işin birbirini çürütmesini böylece ölçülmüş olarak
@@ -440,7 +440,7 @@ engelliyor: sürüm ayrışırsa iki tarama farklı motorlarla döner ve
 ## Katkı sözleşmesi (yeni bulgu geldiğinde)
 
 1. Trivy gate'inin tablo çıktısındaki paket + "Fixed version" değerini al.
-2.   `SECURITY_PATCH_PACKAGES` default'una `paket=floor` ekle (aynı paketin
+2. `SECURITY_PATCH_PACKAGES` default'una `paket=floor` ekle (aynı paketin
    mevcut floor'u varsa yükselt) ve CVE-defteri bloğuna kaydı yaz
    (CVE kimlikleri + floor + kanıt tarihi).
 3. Sistem-paket katmanıysa aynı satırı bu dokümandaki CVE-defterine de işle;
@@ -460,8 +460,13 @@ engelliyor: sürüm ayrışırsa iki tarama farklı motorlarla döner ve
 
 ## CVE-defteri
 
-| Paket | CVE'ler | Floor | Kanıt |
-|---|---|---|---|
+> Tek kaynak: `Dockerfile` → `SECURITY_PATCH_PACKAGES` default'u ve üstündeki
+> CVE-defteri yorum bloğu. Aşağıdaki tablo o defterin okunabilir kopyasıdır,
+> ikinci bir doğruluk kaynağı değildir: paket/floor/CVE kimlikleri ikisinde
+> ayrışırsa `test_cve_ledger_doc_matches_dockerfile` fail eder (commit bloke olur).
+
+| Paket        | CVE'ler                                                                        | Floor                                  | Kanıt                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | libpcre2-8-0 | CVE-2026-86145 (OOB write), CVE-2026-89161 (pcre2_jit_match memory corruption) | 10.42-1+deb12u2 (önc. 10.42-1+deb12u1) | 2026-09-16: yerel trivy 0.74.0 ilk koşumda 2 HIGH yakaladı → yama → 0 bulgu; CI koşum 35161423659 (13 Eylül kırmızı run'ı aynı CVE'lerle) before/after kanıtı. 2026-09-17: desenle yeniden doğrulandı (smoke PASS, 0 bulgu). 2026-10-09 ROTASYON: Debian u1'i depodan çekti (E: Version '10.42-1+deb12u1' ... was not found → apt 100) — docker-security + audit_live_ci_sync kırmızısının kök nedeni; u2'ye taşındı (aday: apt-cache policy, bookworm-security). |
 
 Yeni girdiler buraya ve Dockerfile'daki defter bloğuna eklenir.
@@ -490,6 +495,13 @@ commit bloklanır. Desenin bozulması (ör. floor'un silinmesi, tüm-upgrade'e
 geçilmesi, `**/node_modules`'in bare'a düşmesi) testi fail yapar → commit
 bloke olur.
 
+CVE-defterinin **doküman ↔ Dockerfile paritesi** ayrı bir testtir:
+`test_cve_ledger_doc_matches_dockerfile` yukarıdaki tabloyu tek kaynaktan
+(`SECURITY_PATCH_PACKAGES` default'u + Dockerfile yorum defteri) türetip paket
+kümesini, floor'u ve CVE kimliklerini birebir karşılaştırır. Böylece tabloya
+satır eklemeden Dockerfile'a paket eklemek (ya da tersini yapmak) sessizce
+geçmez; provenans satırının kendisi de `test_cve_ledger_provenance_line` ile
+sabitlenir.
 PR yorum gate'inin girdi bağı da sabitlidir. `test_gate_scripts_meta_guard`
 (`TestGateEnvWiring`) workflow'daki tek-kaynak env tanımını, iki tarama
 adımının `severity`/`ignore-unfixed` girdilerini, yorum adımının env
@@ -498,4 +510,3 @@ geçişini ve script'in o env adlarını okuduğunu birlikte doğrular;
 (kapı MEDIUM içeriyor → MEDIUM bloklar; seviye-okunamadı → `UNKNOWN` +
 fail-closed; env yok → yorum yok; `level: warning`/`note` (mesajda
 `Severity:` yok) → MEDIUM/LOW, bloklamaz ve `| HIGH |` satırı üretmez).
-

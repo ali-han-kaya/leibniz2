@@ -74,6 +74,11 @@ GATE_SCRIPTS = (
     # Ayni beyaz liste kurali: akis YAML'da yeniden yazilmaz, bu script bir
     # run: adiminda cagrilir; secret yoksa denetim baslamaz (yanlis-P1 yok).
     "check_protection_drift.py",
+    # 2026-10-26: haftalik dashboard CIHAZ-paritesi smoke'u
+    # (dashboard-devices-drift.yml — Chromium/CDP + WebKit/Safari). Ayni
+    # beyaz liste kurali: iki cihaz katmani YAML'da yeniden yazilmaz, tek
+    # giris noktasi bu script'tir (katman secimi + SKIP/FAIL verdict'i).
+    "dashboard_devices_smoke.sh",
 )
 
 
@@ -244,6 +249,128 @@ class TestDeployEvidenceCronOrder(unittest.TestCase):
         self.assertIn("fetch-depth: 0", self._gate,
                       "kanıt-defteri kapısı tam geçmişle çalışmalı "
                       "(fetch-depth: 0); shallow clone HEAD kapsamını göremez")
+
+
+class TestDashboardDevicesSchedule(unittest.TestCase):
+    """K10: dashboard cihaz-paritesi haftalık cron'u (dashboard-devices-drift.yml).
+
+    Tarihsel kök-neden (2026-10-26): iki cihaz katmanı (Chromium/CDP +
+    WebKit/Safari) yalnız push/pull_request koşumunda kanıt üretiyordu. Drift
+    — statik varlık 404'ü (MIME), CSP değişimi, seçici kayması, SSE kopması —
+    bu yüzden ancak BİR SONRAKİ PR'da kırmızıya dönüyordu; yani bozulma,
+    kendisi PR'ı bloke ettikten sonra öğreniliyordu. Haftalık cron kanıtı
+    PR'dan ÖNCE üretir.
+
+    Dört sözleşme (fail-closed):
+      1) workflow hem `schedule:` hem `workflow_dispatch:` taşır — elle
+         koşum cron kanıtı değildir, ama tetikleyicinin varlığı ölçülebilir.
+      2) cron haftalıktır ve diğer scheduled workflow'larla AYNI ifadeyi
+         paylaşmaz (aynı dakikaya düşen iki cron kanıtları karıştırır).
+      3) akış kapı script'ine delege edilir: `dashboard_devices_smoke.sh`
+         bir `run:` adımında çağrılır (action substitute edemez — K2 deseni).
+      4) SKIP kanıt sayılmaz: her job'ın assert adımı `layer=<x> verdict=PASS`
+         arar ve yoksa `exit 1` ile KIRMIZI olur. Yoksa eksik kurulumlu bir
+         runner haftalık "yeşil ama kanıtsız" koşum üretir.
+    """
+
+    DRIFT = WORKFLOWS / "dashboard-devices-drift.yml"
+    SCRIPT = "dashboard_devices_smoke.sh"
+
+    @classmethod
+    def setUpClass(cls):
+        cls._wf = cls.DRIFT.read_text(encoding="utf-8")
+
+    def _cron(self):
+        # Prettier YAML'de tek tırnak yazar; iki biçimi de kabul et.
+        m = re.search(r'^\s*- cron:\s*[\'"]([^\'"]+)[\'"]', self._wf, re.M)
+        self.assertIsNotNone(m, "dashboard-devices-drift.yml: cron yok")
+        return m.group(1)
+
+    def _job_block(self, job_id):
+        m = re.search(rf"^  {re.escape(job_id)}:\n(.*?)(?=^  [a-z0-9_-]+:|\Z)",
+                      self._wf, re.M | re.S)
+        self.assertIsNotNone(m, f"job bulunamadı: {job_id}")
+        return m.group(1)
+
+    def _assert_blocks(self):
+        """`Assert real run` adımları — iki job'da aynı ad, ayrı ayrı ölçülür."""
+        blocks = re.split(r"\n(?=\s*- name:)", self._wf)
+        return [b for b in blocks if "Assert real run" in b]
+
+    def test_workflow_file_exists_with_schedule_and_dispatch(self):
+        self.assertTrue(self.DRIFT.is_file(),
+                        "dashboard-devices-drift.yml yok — cihaz drift'i "
+                        "PR'a varmadan görünmez")
+        self.assertRegex(self._wf, r"(?m)^on:\n", "on: bloğu yok")
+        self.assertRegex(self._wf, r"(?m)^\s*schedule:",
+                         "schedule: tetikleyicisi yok")
+        self.assertRegex(self._wf, r"(?m)^\s*workflow_dispatch:",
+                         "workflow_dispatch yok (elle tekrar üretilemez)")
+        self.assertRegex(self._wf, r"(?m)^on:\n(?:  .*\n|\n)*  schedule:",
+                         "schedule: `on:` bloğunun ALTINDA olmalı (üst düzey "
+                         "anahtar değilse tetikleyici sayılmaz)")
+
+    def test_cron_is_a_weekly_monday_expression(self):
+        expr = self._cron()
+        self.assertEqual(len(expr.split()), 5,
+                         f"5 alanlı cron beklenir: {expr!r}")
+        self.assertEqual(expr.split()[4], "1",
+                         "haftanın günü Pazartesi olmalı (yanlış gün alanı "
+                         "cron'u HİÇ tetiklemez)")
+        cron_minute_of_week(expr)  # biçim: haftalık + sayısal alanlar
+
+    def test_cron_does_not_collide_with_other_scheduled_workflows(self):
+        expr = self._cron()
+        for wf in scheduled_workflows():
+            if wf == self.DRIFT:
+                continue
+            others = re.findall(r'^\s*- cron:\s*"([^"]+)"',
+                                wf.read_text(encoding="utf-8"), re.M)
+            with self.subTest(workflow=wf.name):
+                self.assertNotIn(expr, others,
+                                 f"{wf.name} aynı cron'u paylaşıyor: {expr}")
+
+    def test_flow_delegates_to_the_gate_script_via_run(self):
+        # Adım blokları: yalnız `run:` satırında script'i ÇAĞIRAN adımlar
+        # sayılır — üstteki başlık yorumu da script yolunu geçtiği için düz
+        # alt-dize taraması yorumu "çağrı" sanıyordu (ölçüldü).
+        blocks = re.split(r"\n(?=\s*- name:)", self._wf)
+        callers = [b for b in blocks
+                   if re.search(r"^\s*run:.*%s" % re.escape(self.SCRIPT),
+                                b, re.M)]
+        self.assertTrue(callers,
+                        f"akış {self.SCRIPT} script'ine `run:` adımıyla "
+                        "delege edilmeli (YAML'da yeniden yazılmaz — K1)")
+        for block in callers:
+            self.assertNotIn("uses:", block,
+                             "kapı adımı `uses:` içermemeli — script'i "
+                             "substitute eden action kırıntısı")
+
+    def test_skip_is_not_evidence_for_each_layer(self):
+        blocks = self._assert_blocks()
+        self.assertEqual(len(blocks), 2,
+                         "her cihaz katmanı için ayrı assert adımı beklenir "
+                         f"(bulunan: {len(blocks)})")
+        layers = []
+        for block in blocks:
+            layer = "chromium" if "chromium" in block else "webkit"
+            layers.append(layer)
+            self.assertIn(f"layer={layer} verdict=PASS", block,
+                          f"{layer}: assert adımı gerçek koşum kanıtını "
+                          "zorlamalı (verdict=PASS)")
+            self.assertIn("exit 1", block,
+                          f"{layer}: kanıt/SKIP yoksa job düşmeli (exit 1) — "
+                          "yoksa SKIP yine yeşil geçer")
+        self.assertEqual(sorted(layers), ["chromium", "webkit"],
+                         "iki katman da assert edilmeli (biri sessiz kalmasın)")
+
+    def test_layers_run_on_their_native_runners(self):
+        # WebKit/Safari yalnız macOS runner'da gerçek; Chromium ubuntu'da.
+        # Yer değiştirirse "parite" kanıtı sessizce yanlış ortamdan gelir.
+        self.assertIn("runs-on: ubuntu-latest",
+                      self._job_block("chromium-devices"))
+        self.assertIn("runs-on: macos-latest",
+                      self._job_block("webkit-devices"))
 
 
 class TestSkipIsNotEvidenceInCI(unittest.TestCase):
