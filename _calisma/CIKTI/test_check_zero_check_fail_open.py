@@ -24,6 +24,7 @@ stdlib-only, OFFLINE.
 import contextlib
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -36,6 +37,18 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import check_zero_check_fail_open as gate  # noqa: E402
+
+PRETTIER = HERE.parent.parent / "apps" / "dashboard-next" / "node_modules" / ".bin" / "prettier"
+
+
+def _prettier_available():
+    """Kayıt sondası ölçülebilir mi? CI birim job'u dashboard node_modules kurmaz.
+
+    Sonda "ölçüm imkânsız" derse bu test kırmızıya dönerdi; sınıflandırıcının
+    fail-closed sözleşmesi DEĞİŞMEZ — yalnız kendi kayıt testi ortam eksiğinde
+    SKIP eder (tarayıcı tabanı SKIP'leriyle aynı desen).
+    """
+    return os.path.isfile(PRETTIER)
 
 
 ALL_SKIPPED_TEST = """import unittest
@@ -116,6 +129,8 @@ class TestRegistry(unittest.TestCase):
             ["a11y_gate", "keyboard_scope", "playwright_skips",
              "prettier", "changelog_hook"])
 
+    @unittest.skipUnless(_prettier_available(),
+                         "prettier yok (CI birim job'u node_modules kurmaz)")
     def test_every_real_probe_reports_ok(self):
         results = gate.run_probes()
         bad = [(r.key, r.status, r.detail)
@@ -133,6 +148,8 @@ class TestRegistry(unittest.TestCase):
         self.assertIn("BOŞ", err.getvalue())
         self.assertNotIn("verdict: PASS", out.getvalue())
 
+    @unittest.skipUnless(_prettier_available(),
+                         "prettier yok (CI birim job'u node_modules kurmaz)")
     def test_json_mode_is_one_document(self):
         proc = subprocess.run(
             [sys.executable, str(HERE / "check_zero_check_fail_open.py"),

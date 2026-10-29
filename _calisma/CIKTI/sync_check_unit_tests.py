@@ -142,6 +142,9 @@ EXCLUDE = {
     # (CI_JOB_COVERAGE kaydı aynı commit'te). Tarayıcısız guard sınıfları da
     # bu dosyada olduğu için dosya bütün olarak job'a taşınır; Playwright
     # yoksa o sınıflar SKIP eder, guard'lar koşar.
+    # Playwright integration smoke: Chromium ister, kendi preview_server.py'sini
+    # kurar. Koşma yeri: CI `dashboard-smoke` job'u (EXCLUDE_CI_JOBS).
+    "test_dashboard_playwright_smoke.py",
     "test_dashboard_keyboard_nav.py",
 }
 
@@ -384,6 +387,9 @@ EXCLUDE_CI_JOBS = {
     "test_preview_interaction_cdp.py":       "dashboard-smoke",
     # Klavye-gezinme E2E'si: aynı job'ın "Keyboard navigation E2E" adımı.
     "test_dashboard_keyboard_nav.py":        "dashboard-smoke",
+    # Playwright integration smoke: Chromium ister; birim job'u tarayıcı
+    # kurmadığı için manifest dışındadır, `dashboard-smoke` job'unda koşar.
+    "test_dashboard_playwright_smoke.py":    "dashboard-smoke",
     # Özel job'ı olmayanlar — koşma yeri `verify` job'ının tam discover
     # adımıdır (`unittest discover -p "test_*.py"`, verify.yml). Yorumlardaki
     # "CI" imaları buraya bağlanır; sentinel satırı kaybolursa (denetim 4)

@@ -281,7 +281,6 @@ HOOK_COVERAGE = {
         "test_bootstrap_unit_coverage.py",
         "test_bootstrap_units_validate.py",
         "test_check_zero_check_fail_open.py",
-        "test_dashboard_playwright_smoke.py",
     ],
 }
 
