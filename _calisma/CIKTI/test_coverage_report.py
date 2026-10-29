@@ -288,6 +288,7 @@ HOOK_COVERAGE = {
         "test_plist_keepalive_golden.py",
         "test_repack_canonical_binding.py",
         "test_check_id_residual_doc_sync.py",
+        "test_mutation_battery_canonical.py",
     ],
 }
 
