@@ -1,6 +1,7 @@
 # AGENTS.md
 
 ## Workflow and validation
+
 - The repository has a very large shared working tree; never stage broadly. Isolate ownership and stage only explicitly related files before committing.
 - `summary_pattern_drift.py --json` must keep stdout as one JSON document; diagnostics such as the final verdict belong on stderr. `--json-out PATH` also enables JSON mode.
 - Pattern drift compares the workflow merge pattern with `gen_repro_manifest.py`'s `ARTIFACT_JOBS` after exclusions; a real checkout may report drift from intentionally optional/missing artifacts, so resolve the contract before treating the result as a regression.
@@ -28,7 +29,20 @@
 - Squash merges delete the branch commit, so a README changelog row bound to it becomes a dead hash. `.github/workflows/changelog-heal.yml` heals this on every push to main: `_calisma/CIKTI/heal_changelog.py --check` uses the same reachability contract as the gate (`origin/main` ∪ `HEAD`), then `--prune`s dead rows **and appends lag-one missing rows** into a `chore/changelog-heal` bot branch + PR with auto-merge (main is branch-protected, so a bare push returns GH006). The bot commit subject carries the `chore(changelog): [bot]` META prefix (`gen_changelog.META_COMMIT_PREFIX`), which `find_missing_commits` never counts as missing — without it heal sees its own commit as drift and opens a fresh PR on every push; the prefix still matches `DEFAULT_GAP_EXEMPT`. An unmeasurable run (no `origin/main`) is red, not a silent pass; `python3 _calisma/CIKTI/heal_changelog.py --apply` is the local equivalent (`--json` prints one JSON document with `dead`/`missing`/`healed`/`added`).
 - Executed plan docs live in `docs/superpowers/plans/` and keep their checkboxes unchecked (repo convention even for completed plans).
 
+## Senkron çalışma protokolü (queue-driven work)
+
+- **The shared checkout is read-only.** Do queue work in throwaway worktrees (`git worktree add /tmp/q-<id> -B <br> origin/<br>`); never accumulate uncommitted edits in the main working tree. A checkout that is many commits behind `origin/main` with dozens of dirty files is the root cause of "locally ahead, GitHub behind".
+- **Baseline before touching a task:** `git fetch origin --prune`, then confirm `origin/main`'s `verify-delivery`, `docker-security` and `test-smoke` are all green. If main is red, repair main first — never start queue work on a red baseline.
+- **Sync invariant:** after every push `git rev-list --count <branch>..origin/main` must be `0`; a round is not finished until it is.
+- **Four gates before every push:** `test_gen_changelog`, `test_update_changelog_hook`, `test_deploy_evidence`, and `python3 _calisma/CIKTI/deploy_evidence.py --check`.
+- **Re-read `mergeStateStatus` immediately before merging.** Other actors merge concurrently; a `CLEAN` seen seconds earlier can already be stale.
+- **After each merge, re-validate main before starting the next task:** three workflows green, evidence gap ≤ 3, no dead README changelog hashes. The staleness gate fails on `gap > max-head-gap`, so when the gap sits at 3 the next substantive merge turns main red — open the evidence-row PR _before_ that merge.
+- **Classify a red before editing code:** (a) real regression → fix it; (b) staleness / dead-hash gate → open an evidence-row PR or `gen_changelog.py --prune` PR, do not touch code; (c) infrastructure (e.g. `HTTP Error 403: rate limit exceeded` from unauthenticated api.github.com) → `gh run rerun --failed`, never change code to appease it.
+- **Commit-message prefix feeds the gates:** `docs(deploy)` / `chore(changelog)` are exempt from the evidence gap (`DEFAULT_GAP_EXEMPT`), a substantive prefix advances main by one. Squash merges delete the branch commit, so a README changelog row bound to it becomes dead. This is now healed automatically: every push to main runs `.github/workflows/changelog-heal.yml` → `_calisma/CIKTI/heal_changelog.py --check` (same reachability contract as the gate: `origin/main` ∪ `HEAD`); dead rows are `--prune`d **and lag-one missing rows appended** into a `chore/changelog-heal` bot branch + PR with auto-merge, because main is branch-protected and a bare push returns GH006. The bot commit subject carries the `chore(changelog): [bot]` META prefix (`gen_changelog.META_COMMIT_PREFIX`), which `find_missing_commits` never counts as missing — without it heal would see its own commit as drift and open a fresh PR on every push; the prefix still matches `DEFAULT_GAP_EXEMPT`. An unmeasurable run (no `origin/main`) is red, not a silent pass; a manual `python3 _calisma/CIKTI/heal_changelog.py --apply` is the local equivalent (check output: `--json` prints one JSON document with `dead`/`missing`/`healed`/`added`).
+- **Never discard working-tree changes you did not make.** Classify first (identical-to-main / local-only / both-changed) and present the plan for approval; the current tree's inventory is `docs/YEREL_AGAC_UZLASMA_PLANI.md`.
+
 ## Tooling quirks
+
 - Repository tools require structured object arguments: `read_files` takes a `paths` array; `str_replace` takes `path` plus replacement objects with explicit `oldString` and `newString`; malformed serialized arguments fail before execution.
 - This environment exposes `run_terminal_command`, not legacy `run_command`/`run_command_placeholder`; use the listed tool names only.
 - A registered Preview may lose its webview bridge after reload; `preview_snapshot` can still validate DOM/accessibility content, while screenshot/log calls may return `not_attached`/`no_webcontents` without implying a page code error.

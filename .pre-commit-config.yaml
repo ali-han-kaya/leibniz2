@@ -504,6 +504,18 @@ repos:
           ad drift ederse commit bloke — `--write` sayıları ve EXCLUDE'ı
           düzeltir, ad listeleri elle güncellenir. OFFLINE, stdlib-only, ~0.3s.
         entry: python3 _calisma/CIKTI/check_status_check_doc_sync.py
+      - id: check-id-residual-doc-sync
+        name: "Verify ID_RESIDUAL_ACCEPTANCE §4 ↔ donmuş sidecar (fail-closed)"
+        description: >-
+          check_id_residual_doc_sync.py: §4 "Teslim sidecar'ı geçiş kaydı"
+          satırının ham + metadata-stripped (+ varsa kanonik) hash'lerini
+          ingiliz_empirizmi_v3.pdf.metadata.sha256 ile birebir karşılaştırır.
+          Kanonik hücre dolu + kayıtta `# canonical:` yoksa yalnız NOT üretir
+          (§6: bilgi düzeyi) — yenilemeyi repack_delivery.py yazar ve o
+          yenileme deftere bağlıdır (defterde yoksa exit 1). Drift = defter
+          "determinizm kanıtı" sessizce yanlış → commit bloke. OFFLINE,
+          stdlib-only, ~0.01s.
+        entry: python3 _calisma/CIKTI/check_id_residual_doc_sync.py
         language: system
         always_run: true
         pass_filenames: false

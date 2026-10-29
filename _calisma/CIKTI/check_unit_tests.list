@@ -28,6 +28,7 @@ test_check_design_tokens.py
 test_check_doc_wrapper_sync.py
 test_check_hook_env_matrix.py
 test_check_hook_unstaged_deps.py
+test_check_id_residual_doc_sync.py
 test_check_lean_axioms.py
 test_check_lean_statements.py
 test_check_mirror_coverage.py
@@ -113,6 +114,7 @@ test_m0_k_table_sync.py
 test_makefile_texlive.py
 test_mirror_check.py
 test_mirror_panel.py
+test_mutation_battery_canonical.py
 test_orchestrate_k_dag.py
 test_override_trend.py
 test_override_trend_badge.py
@@ -136,6 +138,7 @@ test_record_determinism_trend.py
 test_refs_trend.py
 test_refs_trend_badge.py
 test_render_z3_slides.py
+test_repack_canonical_binding.py
 test_repack_idempotence.py
 test_repack_verify.py
 test_repro_artifact_sections_e2e.py
