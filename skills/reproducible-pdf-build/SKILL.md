@@ -28,14 +28,23 @@ Academic/engineering deliveries ship a PDF built from `.tex`. To prove the
 artifact came from known sources and that a rebuild is trustworthy, you need
 **build determinism**: the same inputs must produce the same bytes (or a
 provable proxy of it). This skill distills a real production lesson: the
-first diagnosis — "the engine is non-deterministic" — was **wrong**, and the
-measurement that refuted it is what makes the fix trustworthy. Three drift
+first diagnosis — "the engine is non-deterministic" — was **wrong**; ölçümle
+çürütüldü (the measurement that refuted it is what makes the fix
+trustworthy). Three drift
 sources were actually measured, each handled by a different layer: a driver
 that never exported `SOURCE_DATE_EPOCH` to the engine (fixed at the harness),
 pdfTeX's per-run trailer `/ID` (neutralized in a canonical hash), and
 `qpdf --remove-metadata` (unstable by design — contained by sidecar reuse).
 The layers that keep a repack byte-identical are the **metadata-stripped
 SHA-256 sidecar** and **fail-closed gates** pinned to an acceptance ledger.
+
+**Status update — that migration is now COMPLETED** in the repo this skill
+came from (leibniz2): the build runs TeXLive + `SOURCE_DATE_EPOCH` +
+`TEXMFOUTPUT`, and the strict gate compares the **`/ID`-canonical** hash
+against a written acceptance ledger
+(`docs/ID_RESIDUAL_ACCEPTANCE.md`), fail-closed, ON by default. The measured
+ledger — including the platform-specific canonical hashes — is the reference;
+read it instead of re-deriving the numbers.
 
 The lesson applies to any pipeline where a PDF (or other generated artifact)
 enters a signed/delivered bundle:
