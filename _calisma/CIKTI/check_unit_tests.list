@@ -11,6 +11,8 @@ test_audit_live_ci_sync.py
 test_audit_octokit_names.py
 test_audit_refs_trend.py
 test_backfill_history_layers.py
+test_bootstrap_unit_coverage.py
+test_bootstrap_units_validate.py
 test_budget_over_banner.py
 test_changelog_heal.py
 test_check_action_pins.py
@@ -38,6 +40,7 @@ test_check_sde_determinism.py
 test_check_unit_tests_timing.py
 test_check_vercel_deploy.py
 test_check_verify_jobs_map.py
+test_check_zero_check_fail_open.py
 test_check_zip_lineage_drift.py
 test_ci_advisory_env.py
 test_ci_check_rate.py

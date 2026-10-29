@@ -1,0 +1,87 @@
+# fresh-bootstrap.yml — BOŞ worktree'de SOĞUK bootstrap sözleşmesi.
+#
+# Amaç: dev_bootstrap.sh'in gerçekten sıfırdan kurabildiğini kanıtlamak.
+# Job, HEAD'den TAZE bir worktree açar (gitignored araç zincirleri —
+# _calisma/.venv_z3, pptx/dashboard node_modules — worktree'de yoktur),
+# runner'ın VARSAYILAN python3'ünü kullanır (setup-python YOK,
+# DEV_BOOTSTRAP_PYTHON3/DEV_BOOTSTRAP_PYTHON_DIRS override'ı YOK) ve betiği
+# BİR KEZ koşar. Sözleşme: ilk koşu rc=0 VE SON satır `BOOTSTRAP OK` olmalı;
+# aksi halde job kırmızı (fail-closed, sessiz PASS yok).
+#
+# Neden varsayılan python3: tarayıcı tabanı (pin'li playwright → Python ≥3.10)
+# venv'in creation anında sabitlenir. Runner imajının default'u tabanı
+# sağlamıyorsa bunu bootstrap kendisi bildirmeli — job tam da bunu ölçer.
+#
+# Kapsam bilinçli olarak DAR: yalnız "ilk soğuk koşu BOOTSTRAP OK'a ulaştı mı".
+# Idempotens, --check, --validate ayrı sözleşmelerdir (unit testleri +
+# battery-trend.yml --check adımı onları kapsar).
+name: fresh-bootstrap
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # CI-hijyen: aynı ref'te üst üste binen koşumlar eskiyi iptal eder.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cold-provision:
+    name: Cold-provision empty worktree (default python3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # setup-python BİLİNÇLİ OLARAK yok: sözleşme, runner imajının kendi
+      # varsayılan python3'ü ile bootstrap etmek.
+      - name: Record the runner's default python3
+        shell: bash
+        run: |
+          set -eu
+          echo "python3: $(command -v python3)"
+          python3 --version
+
+      - name: Create an empty worktree at HEAD
+        shell: bash
+        run: |
+          set -eu
+          cold="$RUNNER_TEMP/cold-worktree"
+          rm -rf "$cold"
+          git worktree add --detach "$cold" HEAD
+          # "Boş worktree" kanıtı: gitignored araç zincirleri YOK.
+          test ! -e "$cold/_calisma/.venv_z3"
+          test ! -e "$cold/_calisma/pptx/node_modules"
+          test ! -e "$cold/apps/dashboard-next/node_modules"
+          printf 'COLD_WORKTREE=%s\n' "$cold" >> "$GITHUB_ENV"
+
+      - name: First bootstrap run must reach BOOTSTRAP OK
+        shell: bash
+        run: |
+          set -eu
+          # Varsayılanlar: yorumlayıcı override'ı ve onarım opt-out'u YOK.
+          unset DEV_BOOTSTRAP_PYTHON3 DEV_BOOTSTRAP_PYTHON_DIRS DEV_BOOTSTRAP_NO_REBUILD
+
+          log="$RUNNER_TEMP/cold-bootstrap.log"
+          status=0
+          bash "$COLD_WORKTREE/_calisma/dev_bootstrap.sh" >"$log" 2>&1 || status=$?
+          cat "$log"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::cold bootstrap exited $status — expected 0"
+            exit 1
+          fi
+          last="$(tail -n 1 "$log")"
+          if [ "$last" != "BOOTSTRAP OK" ]; then
+            echo "::error::cold bootstrap did not reach BOOTSTRAP OK (last line: $last)"
+            exit 1
+          fi
+          echo "OK: cold bootstrap reached BOOTSTRAP OK"

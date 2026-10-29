@@ -369,6 +369,10 @@ class TestHookEntryFailClosed(unittest.TestCase):
         os.makedirs(cikti)
         shutil.copy(os.path.abspath(s.__file__), cikti)
         shutil.copy(HOOK_SCRIPT, cikti)
+        # Hook rc=0'ı tek başına PASS saymaz (vakuum sınıflandırıcısı
+        # zorunlu bağımlılık): sandbox da onu taşımalı.
+        shutil.copy(os.path.join(os.path.dirname(HOOK_SCRIPT),
+                                 "check_zero_check_fail_open.py"), cikti)
         for t in disk:
             with open(os.path.join(cikti, t), "w", encoding="utf-8") as f:
                 f.write(STUB_TEST_BODY)

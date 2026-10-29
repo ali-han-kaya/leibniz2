@@ -278,6 +278,9 @@ HOOK_COVERAGE = {
         "test_backfill_history_layers.py",
         "test_repack_idempotence.py",
         "test_two_write_kill_window.py",
+        "test_bootstrap_unit_coverage.py",
+        "test_bootstrap_units_validate.py",
+        "test_check_zero_check_fail_open.py",
     ],
 }
 
@@ -293,7 +296,8 @@ CI_JOB_COVERAGE = {
     # make accept (hash ledger) — epoch ihracı + CI-linux/yerel kayıtları
     "texlive-accept": ["test_id_residual_acceptance_doc.py"],
     "dashboard-smoke": ["test_dashboard_playwright_smoke.py",
-                        "test_preview_interaction_cdp.py"],
+                        "test_preview_interaction_cdp.py",
+                        "test_dashboard_keyboard_nav.py"],
     "webkit-smoke": ["test_dashboard_webkit_smoke.py"],
     "daemon-http": ["test_daemon_http.py"],
     "plist-check": ["test_plist_gate_exit.py", "test_gen_plist_golden.py"],
@@ -546,6 +550,7 @@ def main(argv=None):
         "test_dashboard_playwright_smoke.py",  # standalone Playwright smoke (Chromium ~10s) — CI'da ayrı job
         "test_dashboard_webkit_smoke.py",  # standalone WebKit smoke — CI `webkit-smoke` job'u (macOS safedriver)
         "test_preview_interaction_cdp.py",  # standalone Playwright/CDP katmanı — CI `dashboard-smoke` job'u
+        "test_dashboard_keyboard_nav.py",  # Playwright/Chromium klavye E2E (~105s) — CI `dashboard-smoke` job'u
         "test_preview_stream_batching.py",  # standalone stream-batching smoke (offline, browser'sız) — CI discover + yerel
         "test_refs_trend_badge_node.js", # standalone JS smoke (Node-only assertion), dokümante bilinçlileşti
     })

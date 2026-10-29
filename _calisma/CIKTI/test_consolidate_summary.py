@@ -21,6 +21,28 @@ sys.path.insert(0, str(CIKTI))
 import consolidate_summary as cs  # noqa: E402
 
 
+def _all_section_paths(paths):
+    """Her bölüm için AÇIK bir yol üret — canlı `logs/` varsayılanına düşmesin.
+
+    Ölçülen kusur (2026-10-26): fixture'lar bölümlerin yalnız bir kısmının
+    yolunu veriyordu. `consolidate_summary.main()` yol verilmeyen bölüm için
+    `DEFAULT_PATHS`'e düşer; `k12`/`k13` verilmediğinde bu
+    `logs/k12_repro_manifest.json` / `logs/k13_repro_manifest.json` olur ve
+    yol ÇALIŞMA DİZİNİNE göre çözülür. CI'da o dizin AKTİF koşumun
+    sidecar'larıdır: K13 adımı yeşilse pano satırı ⚠️ yerine ✅ oluyor ve
+    test summarizer'ı değil koşumun durumunu ölçüyordu (yerelde `logs/`
+    içine aynı dosyalar konunca da aynı iki test kırmızıya düşüyordu).
+
+    Kural: eksik bölümler fixture dizininde VAR OLMAYAN bir yola bağlanır.
+    Böylece durum her koşumda aynı (MISSING) olur ve canlı dosya okunamaz.
+    """
+    paths = {k: pathlib.Path(v) for k, v in paths.items()}
+    base = pathlib.Path(next(iter(paths.values()))).parent / "_absent"
+    for key in cs.DEFAULT_PATHS:
+        paths.setdefault(key, base / f"{key}.json")
+    return paths
+
+
 class TestConsolidateSummary(unittest.TestCase):
     def setUp(self):
         # CI'da GITHUB_STEP_SUMMARY set olduğunda summary_sink() dosyaya
@@ -34,7 +56,7 @@ class TestConsolidateSummary(unittest.TestCase):
     def _run(self, paths):
         buf = io.StringIO()
         argv = []
-        for key, p in paths.items():
+        for key, p in _all_section_paths(paths).items():
             argv += [f"--{key}", str(p)]
         with contextlib.redirect_stdout(buf):
             code = cs.main(argv)
@@ -124,6 +146,53 @@ class TestConsolidateSummary(unittest.TestCase):
         self.assertIn("Negatif senaryolar:", out)
         self.assertIn("`eksik-dosya` :white_check_mark:", out)
 
+    def test_never_reads_the_live_run_logs_dir(self):
+        """CWD'deki canlı `logs/` sidecar'ları okunmamalı — summarizer ölçülür.
+
+        Regresyon kanıtı (2026-10-26): fixture'lar `k12`/`k13` yolunu
+        vermediğinde summarizer `DEFAULT_PATHS` ile çalışma dizinindeki
+        `logs/k12_repro_manifest.json` / `logs/k13_repro_manifest.json`'ı
+        okuyordu. CI'da bu dizin AKTİF koşumun sidecar'larıdır: K13 yeşilse
+        pano ⚠️ yerine ✅ oluyordu — yani test summarizer davranışını değil
+        koşum durumunu ölçüyordu. Burada tuzak sidecar'lar `ok: true` ile
+        yazılır; tüm bölümler açıkça verildiği için çıktı MISSING kalmalı ve
+        tuzak içeriği HİÇ görünmemelidir.
+        """
+        with tempfile.TemporaryDirectory() as d:
+            d = pathlib.Path(d)
+            (d / "logs").mkdir(parents=True)
+            (d / "logs" / "k12_repro_manifest.json").write_text(
+                json.dumps({"ok": True, "exit": 0,
+                            "scenarios": {"tuzak": "PASS"}}),
+                encoding="utf-8")
+            (d / "logs" / "k13_repro_manifest.json").write_text(
+                json.dumps({"layer": "K13", "ok": True, "exit": 0,
+                            "detail": "[K13] repro manifest: 4/4",
+                            "scenarios": [{"name": "tuzak-senaryo",
+                                           "status": "PASS"}]}),
+                encoding="utf-8")
+            # Fixture seti K12/K13'ü hiç sağlamaz (dosyaları da silinir):
+            # yardımcı onları "var olmayan" yola bağlar, varsayılan `logs/`
+            # yoluna düşecek bir boşluk kalmaz.
+            paths = self._sidecars(d / "fixtures")
+            for key in ("k12", "k13"):
+                pathlib.Path(paths.pop(key)).unlink()
+            old_cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                code, out = self._run(paths)
+            finally:
+                os.chdir(old_cwd)
+        self.assertEqual(code, 0)
+        # Tuzak sidecar'lar görülmedi: durum MISSING (⚠️) kalmalı.
+        self.assertIn("K12 plist ⚠️", out)
+        self.assertIn("K13 ayrı-step ⚠️", out)
+        self.assertIn("## ⚠️ K12 plist: sidecar bulunamadı", out)
+        self.assertIn("## ⚠️ K13 repro-manifest: sidecar bulunamadı", out)
+        self.assertNotIn("K12 plist: PASS", out)
+        self.assertNotIn("K13 repro-manifest: PASS", out)
+        self.assertNotIn("tuzak", out)
+
     def test_missing_sidecars_advisory(self):
         with tempfile.TemporaryDirectory() as d:
             dd = pathlib.Path(d)
@@ -153,7 +222,7 @@ class TestConsolidateSummary(unittest.TestCase):
             try:
                 buf = io.StringIO()
                 argv = []
-                for key, p in paths.items():
+                for key, p in _all_section_paths(paths).items():
                     argv += [f"--{key}", str(p)]
                 with contextlib.redirect_stdout(buf):
                     code = cs.main(argv)
@@ -326,7 +395,7 @@ class TestDashboardOnlyAndSkip(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             paths = self._sidecars(d)
             argv = []
-            for key, p in paths.items():
+            for key, p in _all_section_paths(paths).items():
                 argv += [f"--{key}", str(p)]
             argv.append("--dashboard-only")
             code, out = self._run(argv)
@@ -343,7 +412,7 @@ class TestDashboardOnlyAndSkip(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             paths = self._sidecars(d)
             argv = []
-            for key, p in paths.items():
+            for key, p in _all_section_paths(paths).items():
                 argv += [f"--{key}", str(p)]
             argv.append("--skip-dashboard")
             code, out = self._run(argv)
@@ -362,7 +431,7 @@ class TestDashboardOnlyAndSkip(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             paths = self._sidecars(d)
             argv = []
-            for key, p in paths.items():
+            for key, p in _all_section_paths(paths).items():
                 argv += [f"--{key}", str(p)]
 
             # Adım 1: dashboard-only
@@ -447,7 +516,7 @@ class TestSectionContentValidation(unittest.TestCase):
     def _run(self, paths):
         buf = io.StringIO()
         argv = []
-        for key, p in paths.items():
+        for key, p in _all_section_paths(paths).items():
             argv += [f"--{key}", str(p)]
         with contextlib.redirect_stdout(buf):
             code = cs.main(argv)
@@ -582,7 +651,7 @@ class TestPrecommitAndK0Content(unittest.TestCase):
     def _run(self, paths):
         buf = io.StringIO()
         argv = []
-        for key, p in paths.items():
+        for key, p in _all_section_paths(paths).items():
             argv += [f"--{key}", str(p)]
         with contextlib.redirect_stdout(buf):
             code = cs.main(argv)
@@ -709,7 +778,7 @@ class TestFileSink(unittest.TestCase):
         os.environ["GITHUB_STEP_SUMMARY"] = str(summary_file)
         buf = io.StringIO()
         argv = []
-        for key, p in paths.items():
+        for key, p in _all_section_paths(paths).items():
             argv += [f"--{key}", str(p)]
         with contextlib.redirect_stdout(buf):
             code = cs.main(argv)
@@ -721,7 +790,7 @@ class TestFileSink(unittest.TestCase):
         os.environ.pop("GITHUB_STEP_SUMMARY", None)
         buf = io.StringIO()
         argv = []
-        for key, p in paths.items():
+        for key, p in _all_section_paths(paths).items():
             argv += [f"--{key}", str(p)]
         with contextlib.redirect_stdout(buf):
             code = cs.main(argv)
@@ -808,7 +877,7 @@ class TestFileSink(unittest.TestCase):
             os.environ["GITHUB_STEP_SUMMARY"] = str(summary_file)
             buf = io.StringIO()
             argv = ["--dashboard-only"]
-            for key, p in paths.items():
+            for key, p in _all_section_paths(paths).items():
                 argv += [f"--{key}", str(p)]
             with contextlib.redirect_stdout(buf):
                 code = cs.main(argv)
@@ -826,7 +895,7 @@ class TestFileSink(unittest.TestCase):
             os.environ["GITHUB_STEP_SUMMARY"] = str(summary_file)
             buf = io.StringIO()
             argv = ["--skip-dashboard"]
-            for key, p in paths.items():
+            for key, p in _all_section_paths(paths).items():
                 argv += [f"--{key}", str(p)]
             with contextlib.redirect_stdout(buf):
                 code = cs.main(argv)

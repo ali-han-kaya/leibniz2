@@ -3050,6 +3050,16 @@ jobs:
           python3 -m unittest -v _calisma.CIKTI.test_dashboard_playwright_smoke \
             2>&1 | tee -a dashboard_interaction_report.txt
 
+      # Klavye-gezinme E2E'si (Playwright): theme toggle, bütçe banner'ı,
+      # run-history satırı/filtresi, Z3 sekme+lightbox, klavye-kapsam taraması.
+      # ~105s Chromium → pre-commit bataryasından çıkarıldı (EXCLUDE),
+      # CI_JOB_COVERAGE["dashboard-smoke"] kaydı bu adımı gösterir.
+      - name: Keyboard navigation E2E (Playwright)
+        run: |
+          set -o pipefail
+          python3 -m unittest -v _calisma.CIKTI.test_dashboard_keyboard_nav \
+            2>&1 | tee -a dashboard_interaction_report.txt
+
       # Banner: iki-temalı axe (dark/light sıfır ihlal) + ekran-görüntüsü
       # karşılaştırması (tema gerçekten repaint ediyor; dekor katmanı
       # görüntüde belirgin ama metin kontrastını değiştirmiyor).

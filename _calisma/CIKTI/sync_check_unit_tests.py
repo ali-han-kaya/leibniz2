@@ -136,14 +136,16 @@ EXCLUDE = {
     # dönebilir; yani bu EXCLUDE yalnızca tarayıcı katmanını erteler.
     "test_preview_interaction_cdp.py",
 
-    # Playwright integration smoke test: Chromium needed, ~10s/run, starts    # Playwright integration smoke test: Chromium needed, ~10s/run, starts
-    # its own preview_server.py. Runs standalone, not in the 10s pre-commit
-    # gate (pre-commit's check-unit-tests budget would blow up).
-    # Koşma yeri: `verify` job'ının full discover'ı (EXCLUDE_CI_JOBS).
-    # Playwright `a11y-gate` job'ında kuruluyor ama o job bu testi koşmuyor;
-    # full discover Playwright kurulu olmadan çalıştığı için test CI'da SKIP'e
-    # düşer (ortam-yok ≠ kod-bozuk sözleşmesi) — ölçüldü 2026-09-30.
+    # Klavye-gezinme E2E'si: 28 testin 26'sı Playwright/Chromium ister ve
+    # kendi preview_server.py'sini kurar (~105s) — pre-commit bütçesinin
+    # tamamından büyük. Koşma yeri: CI `dashboard-smoke` job'u
+    # (CI_JOB_COVERAGE kaydı aynı commit'te). Tarayıcısız guard sınıfları da
+    # bu dosyada olduğu için dosya bütün olarak job'a taşınır; Playwright
+    # yoksa o sınıflar SKIP eder, guard'lar koşar.
+    # Playwright integration smoke: Chromium ister, kendi preview_server.py'sini
+    # kurar. Koşma yeri: CI `dashboard-smoke` job'u (EXCLUDE_CI_JOBS).
     "test_dashboard_playwright_smoke.py",
+    "test_dashboard_keyboard_nav.py",
 }
 
 
@@ -383,6 +385,11 @@ EXCLUDE_CI_JOBS = {
     # Hermetic etkileşim E2E'si (hover tooltip / filtre / lightbox): kendi
     # sunucusunu + sentetik verisini kurar, Chromium ister → ayrı job.
     "test_preview_interaction_cdp.py":       "dashboard-smoke",
+    # Klavye-gezinme E2E'si: aynı job'ın "Keyboard navigation E2E" adımı.
+    "test_dashboard_keyboard_nav.py":        "dashboard-smoke",
+    # Playwright integration smoke: Chromium ister; birim job'u tarayıcı
+    # kurmadığı için manifest dışındadır, `dashboard-smoke` job'unda koşar.
+    "test_dashboard_playwright_smoke.py":    "dashboard-smoke",
     # Özel job'ı olmayanlar — koşma yeri `verify` job'ının tam discover
     # adımıdır (`unittest discover -p "test_*.py"`, verify.yml). Yorumlardaki
     # "CI" imaları buraya bağlanır; sentinel satırı kaybolursa (denetim 4)
@@ -390,10 +397,6 @@ EXCLUDE_CI_JOBS = {
     "test_all_hooks_smoke.py":               "verify",
     "test_check_history.py":                 "verify",
     "test_cleanup.py":                       "verify",
-    # 2026-10-08: dashboard-smoke job'ı eklendi — bu smoke artık özel job'ında
-    # GERÇEKTEN koşar (eskiden verify'ın full discover'ında Playwright kurulu
-    # olmadığı için SKIP'e düşüyordu; ölçüldü 2026-09-30).
-    "test_dashboard_playwright_smoke.py":    "dashboard-smoke",
     "test_k18_daemon.py":                    "verify",
     "test_preview_prestart.py":              "verify",
     "test_verify_refs.py":                   "verify",  # refs-online adımı verify içinde
