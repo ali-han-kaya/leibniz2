@@ -4490,11 +4490,10 @@ def _k12_negative_scenarios(add, upd_script, drift_script):
 def fold_plist_golden_findings(golden_report, add):
     """check_plist_drift.py --json raporundaki P0/P1 bulgularını findings'e işler.
 
-    Fazla-profil drift'i (golden'da olmayan render edilmiş profil) P0
-    FAIL-CLOSED'dır — golden seti şablonla senkron değil, sessiz kapsam
-    kaybını önlemek için build'i bloke eder. Diğer golden drift'leri
-    (eksik/bayat/yapısal geçersiz) P1 advisory kalır. PASS bulguları
-    findings'e girmez.
+    Fazla-profil drift'i (golden'da olmayan render edilmiş profil) P0,
+    eksik/bayat/yapısal geçersiz drift'ler P1'dir. HER İKİSİ FAIL-CLOSED'dır
+    — katman verdict'i P0/P1'i bloke edici sayar, sessiz kapsam kaybı geçmez.
+    PASS bulguları findings'e girmez.
 
     add(priority, id, check, message, detail) imzalı callback kullanır
     (verify_delivery'nin iç `add`'i). Döner: has_p0 (fail-closed sinyali).
@@ -5443,9 +5442,9 @@ def main():
             # ── Golden denetim (check_plist_drift.py) — P0/P1 entegrasyonu ──
             # Şablon → render → golden karşılaştırması (runtime --plist-check
             # ile aynı şablondan ama golden kümesine karşı). Fazla-profil
-            # drift'i (golden'da olmayan render edilmiş profil) P0
-            # FAIL-CLOSED'dır — golden seti şablonla senkron değil; diğer
-            # golden drift'leri (eksik/bayat/geçersiz) P1 advisory kalır.
+            # drift'i (golden'da olmayan render edilmiş profil) P0; eksik/
+            # bayat/geçersiz drift'ler P1 — HER İKİSİ FAIL-CLOSED'dır (advisory
+            # drift sınıfı yok).
             # Best-effort: check_plist_drift.py yoksa/çalışmazsa (ör. golden
             # dizini yok) sessizce atlanır — runtime denetimi zaten koştu.
             golden_report = None

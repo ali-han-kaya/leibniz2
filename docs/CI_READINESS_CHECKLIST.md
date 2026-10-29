@@ -86,6 +86,13 @@ Desen kaynağı: `adobe/skills@appbuilder-cicd-pipeline` `references/checklist.m
       ```bash
       python3 _calisma/CIKTI/status_checks.py --gh --json
       ```
+- [ ] **Gözetimsiz/CI okuma** — `GITHUB_TOKEN` branch protection OKUYAMAZ
+      (`administration` izni Actions `permissions:` bloğunda geçersizdir).
+      Okumayı CI'da gerçekten yapmak için `PROTECTION_PAT` secret'ı kurulur
+      (fine-grained, yalnızca **Administration: read**); `status_checks.py`
+      bu token'ı yalnız `gh api .../protection` çağrısında `GH_TOKEN` olarak
+      kullanır (`GH_ADMIN_TOKEN` yedek isim). Secret yoksa verdict
+      `UNREADABLE` kalır — sessiz PASS yok.
 - [ ] Koruma kurulu (branch protection) — koruma yoksa `--gh` 404'ü güvenle
       atlar (ilk publish akışı), ama required check'ler kurulu olmalı.
 

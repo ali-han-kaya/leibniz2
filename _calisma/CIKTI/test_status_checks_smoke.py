@@ -47,11 +47,11 @@ class TestStatusChecksGhSmoke(unittest.TestCase):
                 self._exit_code = 0
         return json.loads(out.getvalue())
 
-    def test_real_13_rows_are_deterministic_pass_table(self):
+    def test_real_16_rows_are_deterministic_pass_table(self):
         checks = list(sc.gate_jobs().values())
-        # Current workflow: 16 required-check candidates (GitHub required
-        # contexts listinin birebir karşılığı; 14 -> 15: texlive-accept,
-        # 15 -> 16: webkit-smoke — protection contexts == gate_jobs).
+        # Current workflow: 16 required-check candidates — canlı GitHub
+        # required contexts listesinin birebir karşılığı (2026-10-25 ölçümü:
+        # webkit-smoke + preview-reload-smoke advisory, dashboard-smoke required).
         self.assertEqual(len(checks), 16)
         payload = self._json(self._protection(checks))
         self.assertEqual(payload["verdict"], "PASS")

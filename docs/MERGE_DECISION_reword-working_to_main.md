@@ -9,16 +9,16 @@ topoloji → commit → dosya katmanında kanıtlanmıştır.
 
 ## 1. Topoloji ve sayılar
 
-| Ölçüm | Değer |
-|---|---|
-| merge-base | `7333a55` |
-| Daldа main'e girmemiş commit | **104** |
-| main'de daldа olmayan commit | 29 (3'ü merge: PR #48/#47/#45) |
-| Dal commit'lerinden main'de **patch-dengi** (`git cherry -`) | 16 |
-| Dal commit'lerinden gerçekten benzersiz (`git cherry +`) | 88 |
-| main tarafında benzersiz commit | 10 |
-| `git merge-tree` simülasyonu | **rc=1 — 22 dosyada çakışma** |
-| Net içerik farkı `origin/main..HEAD` | 45 dosya, +1211/−378 |
+| Ölçüm                                                        | Değer                          |
+| ------------------------------------------------------------ | ------------------------------ |
+| merge-base                                                   | `7333a55`                      |
+| Daldа main'e girmemiş commit                                 | **104**                        |
+| main'de daldа olmayan commit                                 | 29 (3'ü merge: PR #48/#47/#45) |
+| Dal commit'lerinden main'de **patch-dengi** (`git cherry -`) | 16                             |
+| Dal commit'lerinden gerçekten benzersiz (`git cherry +`)     | 88                             |
+| main tarafında benzersiz commit                              | 10                             |
+| `git merge-tree` simülasyonu                                 | **rc=1 — 22 dosyada çakışma**  |
+| Net içerik farkı `origin/main..HEAD`                         | 45 dosya, +1211/−378           |
 
 **Kök durum:** Aynı işin büyük bölümü daldan PR'lerle (squash/rebase
 edilerek) main'e girmiş; SHA'lar farklı ama içerikler çakışıyor
@@ -27,16 +27,16 @@ ağırlıklı **add/add** çakışmaları var — semantik olarak "iki kopya iş
 
 ## 2. main tarafındaki 10 benzersiz commit — tek tek değerlendirme
 
-| Commit | Konu | Merge'de akıbeti |
-|---|---|---|
-| `e6572d1` | PR #42 dev squash (262 dosya, +32.570) — reproducibility gates, verify_mcp, dashboard hardening | Dal bu işin tamamını içeriyor (aynı işin uzun serisi) → dal ucu kazanır |
-| `4c483d4`, `534b468`, `cfcaf91` | README changelog resync/prune | Dalın changelog'una işlenmiş (dalandaki README +109 satır) → dal ucu kazanır, merge sonrası `check-changelog-sync` hook'u otomatik senkronlar |
-| `f8a1fa0` | Review PDF rebuild + sha256 | **Korunacak**: PDF dalda da değişmiş (add/add çakışma). Karar: dalın PDF'i (V5 zincirinin resmi üretimi) + sha256 yeniden doğrulama; main'in PDF'i eski delivery-resync öncesi |
-| `ba088ad` | V5m lineage pin (zip_lineage.json) | **Korunacak satır**: daldaki zip_lineage b69de33 pin'ini içeriyor (`3965c31`); çözümde iki pin setinin birleşimi alınır, `check-zip-lineage-drift` gate doğrular |
-| `16d4e06` | review-freshness kendi-repo-zaman düzeltmesi (+test, 64 satır) | **main-e-özeli=13/51, dal-e-özeli=0** — daldа YOK. Çözümde main sürümü esas alınır (dalın dokunuşu bu dosyada yok) |
-| `f70779c` | .dockerignore: host z3 venv'i build dışı (4 kural) | **main-e-özeli=6, dal-e-özeli=0** — daldа YOK. main sürümü esas alınır (güvenlik/build hijyeni) |
-| `d37d6da` | update_preview.sh bootstrap-arg sırası (+test) | **İki yönlü 27↔33**: dal da bu dosyayı değiştirmiş. 3-way çözüm + main'in arg-order testi korunur |
-| `a4aa981` (+#48,#47,#45) | Merge commitleri | Otomatik (3-way) |
+| Commit                          | Konu                                                                                            | Merge'de akıbeti                                                                                                                                                               |
+| ------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `e6572d1`                       | PR #42 dev squash (262 dosya, +32.570) — reproducibility gates, verify_mcp, dashboard hardening | Dal bu işin tamamını içeriyor (aynı işin uzun serisi) → dal ucu kazanır                                                                                                        |
+| `4c483d4`, `534b468`, `cfcaf91` | README changelog resync/prune                                                                   | Dalın changelog'una işlenmiş (dalandaki README +109 satır) → dal ucu kazanır, merge sonrası `check-changelog-sync` hook'u otomatik senkronlar                                  |
+| `f8a1fa0`                       | Review PDF rebuild + sha256                                                                     | **Korunacak**: PDF dalda da değişmiş (add/add çakışma). Karar: dalın PDF'i (V5 zincirinin resmi üretimi) + sha256 yeniden doğrulama; main'in PDF'i eski delivery-resync öncesi |
+| `ba088ad`                       | V5m lineage pin (zip_lineage.json)                                                              | **Korunacak satır**: daldaki zip_lineage b69de33 pin'ini içeriyor (`3965c31`); çözümde iki pin setinin birleşimi alınır, `check-zip-lineage-drift` gate doğrular               |
+| `16d4e06`                       | review-freshness kendi-repo-zaman düzeltmesi (+test, 64 satır)                                  | **main-e-özeli=13/51, dal-e-özeli=0** — daldа YOK. Çözümde main sürümü esas alınır (dalın dokunuşu bu dosyada yok)                                                             |
+| `f70779c`                       | .dockerignore: host z3 venv'i build dışı (4 kural)                                              | **main-e-özeli=6, dal-e-özeli=0** — daldа YOK. main sürümü esas alınır (güvenlik/build hijyeni)                                                                                |
+| `d37d6da`                       | update_preview.sh bootstrap-arg sırası (+test)                                                  | **İki yönlü 27↔33**: dal da bu dosyayı değiştirmiş. 3-way çözüm + main'in arg-order testi korunur                                                                              |
+| `a4aa981` (+#48,#47,#45)        | Merge commitleri                                                                                | Otomatik (3-way)                                                                                                                                                               |
 
 ## 3. Daldaki benzersiz katkılar (main'e taşınacak asıl değer)
 
@@ -60,28 +60,28 @@ ağırlıklı **add/add** çakışmaları var — semantik olarak "iki kopya iş
 Dosya başına iki yönlü ölçüm (`git diff origin/main HEAD`, `^−`=main'e özel,
 `^+`=dala özel):
 
-| Dosya | main↔dal | Karar |
-|---|---|---|
-| `.dockerignore` | 6↔0 | **main** (z3 venv kuralları) |
-| `check_review_freshness.py` | 13↔0 | **main** (16d4e06) |
-| `test_check_review_freshness.py` | 51↔0 | **main** |
-| `test_check_bootstrap_start_smoke.py` | 32↔0 | **main** (d37d6da) |
-| `update_preview.sh` | 27↔33 | **3-way birleşim** — main'in arg-order düzeltmesi + dalın diğer dokunuşları, elle |
-| `Dockerfile` | 4↔5 | **3-way birleşim** — main'in pcre2 yaması (5bf6ebe, bizimkiyle eşdeğer) + dalın yorum bütünlüğü |
-| `verify.yml` | 32↔32 | **dal** (CI borç düzeltmeleri + plist zinciri) — main'in 32'si changelog/açıklama satırları; SC2002 ve hook-install düzeltmesi dalda |
-| `preview_server.py` | 0↔24 | **dal** |
-| `test_texlive_determinism_*`, `texlive_determinism_*` | 0..9↔12..61 | **dal** (sadece dalda; add/add kopyaları dalınca çözülür) |
-| `test_coverage_report.py` | 0↔1 | **dal** (HOOK_COVERAGE satırı) |
-| `check_unit_tests.list` | 0↔1 | **dal** + merge sonrası `sync_check_unit_tests.py --check` |
-| `.gitignore` | 0↔16 | **dal** |
-| `README.md` | 26↔109 | **dal** (changelog tabloları dalınca güncel; hook resync'i doğrular) |
-| `actionlint_gate.py` | 6↔19 | **dal** (kontrat fix'leri) |
-| `plist-golden/*server.plist` | 6↔2 | **dal** (3918a04 golden'ları — main'inki drift'li eski model) |
-| `plist-golden/*leibniz2.plist` | — | **dal** (yalnız daldа değişmiş) |
-| `verify_mcp/{README,server}` | 1↔1 | **3-way** (tek satırlık dokunuşlar; dalın performans fix'i esas) |
-| `findings.md` | 72↔77 | **dal** (denetim raporu dalınca güncel) |
-| `_calisma/REVIEW/*.pdf(+sha256)` | add/add | **dal** + sha256'yı dosyayla yeniden doğrula |
-| `.dockerignore` (add/add kısmı), `Dockerfile` (add/add kısmı) | — | 3-way; yukarıdaki satır kararlarına uy |
+| Dosya                                                         | main↔dal    | Karar                                                                                                                                |
+| ------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `.dockerignore`                                               | 6↔0         | **main** (z3 venv kuralları)                                                                                                         |
+| `check_review_freshness.py`                                   | 13↔0        | **main** (16d4e06)                                                                                                                   |
+| `test_check_review_freshness.py`                              | 51↔0        | **main**                                                                                                                             |
+| `test_check_bootstrap_start_smoke.py`                         | 32↔0        | **main** (d37d6da)                                                                                                                   |
+| `update_preview.sh`                                           | 27↔33       | **3-way birleşim** — main'in arg-order düzeltmesi + dalın diğer dokunuşları, elle                                                    |
+| `Dockerfile`                                                  | 4↔5         | **3-way birleşim** — main'in pcre2 yaması (5bf6ebe, bizimkiyle eşdeğer) + dalın yorum bütünlüğü                                      |
+| `verify.yml`                                                  | 32↔32       | **dal** (CI borç düzeltmeleri + plist zinciri) — main'in 32'si changelog/açıklama satırları; SC2002 ve hook-install düzeltmesi dalda |
+| `preview_server.py`                                           | 0↔24        | **dal**                                                                                                                              |
+| `test_texlive_determinism_*`, `texlive_determinism_*`         | 0..9↔12..61 | **dal** (sadece dalda; add/add kopyaları dalınca çözülür)                                                                            |
+| `test_coverage_report.py`                                     | 0↔1         | **dal** (HOOK_COVERAGE satırı)                                                                                                       |
+| `check_unit_tests.list`                                       | 0↔1         | **dal** + merge sonrası `sync_check_unit_tests.py --check`                                                                           |
+| `.gitignore`                                                  | 0↔16        | **dal**                                                                                                                              |
+| `README.md`                                                   | 26↔109      | **dal** (changelog tabloları dalınca güncel; hook resync'i doğrular)                                                                 |
+| `actionlint_gate.py`                                          | 6↔19        | **dal** (kontrat fix'leri)                                                                                                           |
+| `plist-golden/*server.plist`                                  | 6↔2         | **dal** (3918a04 golden'ları — main'inki drift'li eski model)                                                                        |
+| `plist-golden/*leibniz2.plist`                                | —           | **dal** (yalnız daldа değişmiş)                                                                                                      |
+| `verify_mcp/{README,server}`                                  | 1↔1         | **3-way** (tek satırlık dokunuşlar; dalın performans fix'i esas)                                                                     |
+| `findings.md`                                                 | 72↔77       | **dal** (denetim raporu dalınca güncel)                                                                                              |
+| `_calisma/REVIEW/*.pdf(+sha256)`                              | add/add     | **dal** + sha256'yı dosyayla yeniden doğrula                                                                                         |
+| `.dockerignore` (add/add kısmı), `Dockerfile` (add/add kısmı) | —           | 3-way; yukarıdaki satır kararlarına uy                                                                                               |
 
 ## 5. Riskler ve siperler (safety net)
 
@@ -99,12 +99,13 @@ Dosya başına iki yönlü ölçüm (`git diff origin/main HEAD`, `^−`=main'e 
 ## 6. Karar
 
 **MERGE (3-way, merge-commit)** — koşullar:
+
 - [ ] 22 dosya yukarıdaki tabloya göre çözülür (main'in 5 bağımsız düzeltmesi
-  `16d4e06`, `f70779c`, `d37d6da`, `ba088ad`, `f8a1fa0` korunur).
+      `16d4e06`, `f70779c`, `d37d6da`, `ba088ad`, `f8a1fa0` korunur).
 - [ ] Yerel doğrulama zinciri (§5.1) yeşil.
 - [ ] Merge push'ı sonrası 3/3 workflow success kanıtı alınır.
 - Commit başlığı önerisi: `merge: land reword-working (verify chain RC, CI
-  debt fixes, determinism evidence) preserving main-side independent fixes`
+debt fixes, determinism evidence) preserving main-side independent fixes`
 
 ## 7. Uygulama doğrulaması (denetim: 2026-10-12)
 
@@ -125,11 +126,11 @@ git log -1 --format=%B "$M"      # çakışan 22 dosyanın listesi
 
 ### 7.1 Sınıflandırma
 
-| Sınıf | Yol | §4 kararı | Uyum |
-|---|---|---|---|
-| Dal tarafı kazandı (`A == M`) | 11 | "dal" / "3-way" | ✅ (main'in pcre2 yaması dalda eşdeğeriyle; `actionlint_gate.py`'da dalın fail-closed severity fix'i main'in fail-open sürümünün önünde; plist golden'da dalın drift'siz sürümü) |
-| Main tarafı kazandı (`B == M`) | 9 | "main" / "3-way" | ✅ (`check_review_freshness.py` + testi, `test_check_bootstrap_start_smoke.py`, `.dockerignore`; `verify_mcp/*` farkı yalnız K21↔K22 doküman satırı) |
-| Elle birleştirildi | 2 | "3-way birleşim" | ✅ (`update_preview.sh` arg-order + dal dokunuşları; `README.md`) |
+| Sınıf                          | Yol | §4 kararı        | Uyum                                                                                                                                                                             |
+| ------------------------------ | --- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dal tarafı kazandı (`A == M`)  | 11  | "dal" / "3-way"  | ✅ (main'in pcre2 yaması dalda eşdeğeriyle; `actionlint_gate.py`'da dalın fail-closed severity fix'i main'in fail-open sürümünün önünde; plist golden'da dalın drift'siz sürümü) |
+| Main tarafı kazandı (`B == M`) | 9   | "main" / "3-way" | ✅ (`check_review_freshness.py` + testi, `test_check_bootstrap_start_smoke.py`, `.dockerignore`; `verify_mcp/*` farkı yalnız K21↔K22 doküman satırı)                             |
+| Elle birleştirildi             | 2   | "3-way birleşim" | ✅ (`update_preview.sh` arg-order + dal dokunuşları; `README.md`)                                                                                                                |
 
 Bugün hâlâ dal blob'unu taşıyan 5 yol (`main == M != B`) var — bu, §4'ün
 "dal" kararlarının sonradan sessizce geri alınmadığını gösterir.
@@ -149,3 +150,54 @@ Denetimde **onarılacak bir kayıp bulunmadı**: 22 çakışmanın dosya-bazlı
 şekilde aşılmış durumda. Kayıt amacı, main'e giren bu çakışma çözümünü karar
 dokümanıyla **kanıtla** bağlamaktır — yeniden ölçüm için §7'nin başındaki
 komutlar yeterlidir.
+
+---
+
+## 8. Çalışma akışı kapıları — gerekli status check'ler (2026-10-27 kararı)
+
+Sorun: GitHub branch protection'ın _gerekli_ status-check listesi, squash
+mühürlerinin iş adını (ör. `build (…)`) eşiğiyle eşleşmez ve gerçek iş
+adı (`verify`) yalnız `checks`/`push` koşullarında geçtiğinden dalın kendi
+commit'i hiçbir eşiği karşılamıyordu — rebase akışında test edilmiştir.
+
+Karar (yönetici onayı):
+
+| Status check                                      | Sınıf                             | Gerekçe                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verify`                                          | **gerekli**                       | Tüm tak-izi workflow kapıları (`workflow-gates`, `docker-security`, `test-smoke`, `fresh-bootstrap`, …) `verify`'i tetikler; main'in 2026-09-30/2026-10-02 history'si tam destekliyor. Squashed branch commit'leri kapsamaz; rebase/squash-merge akışında branch commit'i kapsar. |
+| `check-unit-tests`                                | **gerekli**                       | battery tetikleyicisi — main kanıtı koyu yeşil (2026-09-30, …).                                                                                                                                                                                                                   |
+| `Dokuz F3 — battery'yi check-unit-tests'e kaydır` | _checks_ → **artık checks değil** | F3 battery'yi `verify`'e taşır; son statik doğrulama artık `checks` koşulu değil, `verify` koşuludur; spesifik status-check doğrulaması `checks` ile değil `verify` + `plan` (F3 performans gate'i) ile yapılır.                                                                  |
+
+Tam set — gerekli: `checks`, `push`, `plan`, `…push performans gate'i`,
+`verify`, `check-unit-tests`, `verify-delivery`, `chore/changelog`
+(kontrolü önbelleklenmiş → `prettier-drift`, `test-smoke`,
+`docker-security`, `fresh-bootstrap`), `Merge Karar Pozu (canary)`.
+
+---
+
+## 9. `deploy-evidence` — geliştirici doğrulaması / yeşil onayı (2026-10-27)
+
+Sorun: push gate zorunlu `checks`/`push` koşulunu karşılıyor — ama
+`deploy-evidence`'ın kapı sınıfı (neyi doğruladığı) netleştirilmemişti.
+
+Karar: Evet — deploy zaten **canlı HTTP** üzerinden kendi kendini
+doğrular: `GET /api/latest` yanıtında `(verdict, p0, p1)` alanları
+yoksa `SystemExit` ile düşer; alanlar varsa checksum `a11y` denetimi
+ile eşleşince yeşil (`passed`) döner. Kalem önbelleklenmemiş — her
+koşuda yeniden doğrulanır. Kapı sınıfı: **geliştirici doğrulaması = Evet**.
+
+---
+
+## 10. `a11y-gate` — matrix kaldırma → tek job (2026-10-27 kararı)
+
+Sorun: `a11y-gate`'in 2-job'lık sabit `matrix`i (`dark`/`light`) iki ayrı
+check adı üretiyor (`a11y-gate (dark)`, `a11y-gate (light)`); branch
+protection'daki eski eşik satırları main'e giren yeni kalıpla eşleşmiyor.
+
+Karar: **matrix kaldır ve iki temayı tek job içinde döngüyle tara**
+(`strategy.matrix` → `for theme in dark light`). Tek `a11y-gate` check adı
+üretilir; branch protection'dan `a11y-gate (dark)` / `a11y-gate (light)`
+satırlarını **sil** ve zorunlu listeye **tek `a11y-gate`** ekle.
+Artifact adları tema-suffixed kalmalı (`a11y_dashboard_….json` vb.) —
+ad çakışması önlenir; matrix kaldırmanın getirdiği kazanım yalnızca
+**tek check adı**dır.

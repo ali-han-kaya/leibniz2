@@ -136,6 +136,87 @@ resolve paths against `git rev-parse --show-toplevel` (see the scan above).
 - Make `refs_trend.py` write `refs-trend.json` atomically (`tmp` +
   `os.replace`), mirroring the history sidecar pattern.
 
+## Environment-skip legitimacy — which environment-skipped suites count as legitimate in CI
+
+Decision recorded 2026-10-25, audited against `verify-delivery` run
+40236083284 (main @ 35c5e298). Enforcement lives in the unit-test hook's
+vacuous classifier (`_calisma/CIKTI/check_zero_check_fail_open.py` +
+`_calisma/CIKTI/check_unit_tests_hook.sh`).
+
+The decision line is **step ordering in `.github/workflows/verify.yml`**:
+`jsonschema`, `Pillow` and `PyYAML` are installed **before** the unit-test
+battery (`if: always()` steps); `pdfinfo`/`qpdf`, Z3 and Lean are installed
+**after** it (they only run when the battery is green), and tectonic/TeXLive
+is installed only by `determinism-trend.yml`.
+
+| Skip class | Legitimate in CI? | Enforcement |
+|---|---|---|
+| Whole-file **measured** skip (`Ran N>0 … OK (skipped=N)`) of a manifest suite pinned in `CI_FULL_SKIP_ALLOWANCE` — currently only `test_z3_slide_reproducibility.py` (reason: `tectonic yok`) | **Yes** | Classifier returns `ALLOWED` (rc 0) only when called with `--suite <name>`; the hook prints `izinli tam-skip (CI'da meşru)` visibly; allowlist contents pinned by `TestCiFullSkipAllowlist` |
+| Whole-file skip of any other manifest suite | **No** | `vacuous` → hook prints `FAILED: <file> — … 0 gerçek test` and blocks the commit |
+| Whole-file skip with no `Ran N` line (unmeasurable output) | **No — never allowlisted** | Measurement absence ≠ legitimate skip |
+| Partial skips of tools the unit job does **not** install before running tests: playwright/Chromium, pdftotext (poppler), tectonic, lean/lake (`~/.elan`), plutil (Linux runner), safedriver/Xcode (macOS-only), `.venv_z3` provisioning, dashboard `node_modules` (tsc/prettier/pptx), prisma generate, live inputs (history.jsonl, K12 sidecar, experiment reports), daemon-HTTP (skipped by design in CI) | **Yes** | Reported per file and in totals (`N test, K skip`); the file must still execute ≥1 test — otherwise it becomes a whole-file skip and the rules above apply |
+| Partial skips of `jsonschema` / Pillow / PyYAML | **No** | Installed before the battery with `if: always()` — a skip means the install step regressed; a full skip fails as vacuous, a partial skip stays visible in the counts |
+
+**Counting rule:** executed-test counting prefers the per-test `... ok`
+lines of a `-v` log — the hook (`run_one_file`) and the parallel runner
+(`run_unit_tests_parallel.py`) both pass `-v`. The `Ran − skipped` summary
+arithmetic is only the fallback for summary-only logs, because a class-level
+`setUpClass` skip inflates `skipped=` without reducing `Ran`: that pairing
+produced a false VACUOUS on `test_dashboard_webkit_smoke` even though its
+static layer had executed (measured locally, 2026-10-25).
+
+**Boundary:** suites excluded from the manifest (`sync_check_unit_tests.py`
+`EXCLUDE` — `test_dashboard_playwright_smoke.py`, `test_lake_evidence_smoke.py`)
+and suites outside `_calisma/CIKTI`
+(`docs/branch-protection-guide/test_render_screens.py`) are never seen by the
+classifier; the aggregate battery step and their own hooks cover them.
+
+**Audit evidence** (run 40236083284, 184 manifest files): exactly **one**
+manifest suite executed zero tests in CI — `test_z3_slide_reproducibility`
+(`tectonic yok`, allowlisted above). 16 suites partially skipped, every
+reason from the legitimate-partial list. No jsonschema/Pillow/PyYAML suite
+skipped at all — those installs were healthy.
+
+**Changing the decision:** edit `CI_FULL_SKIP_ALLOWANCE`, its pinning test
+(`TestCiFullSkipAllowlist`) and this table in the same commit. Moving a
+tool's install step *before* the battery (e.g. the hardening item above)
+makes that tool's skips illegitimate — update the table and the allowlist
+together.
+
+**Triage note (advisory red ≠ gate red):** the
+`Run check-unit-tests hook (separate)` step is `continue-on-error: true` —
+a proof step, not a gate. A red there while the battery stays green is
+nondeterminism, not a gate failure (observed 2026-10-25: one in-job
+`test_consolidate_summary` FAILED out of three runs, never reproducible
+locally; the HEAD hook at the time swallowed the traceback with
+`>/dev/null` — the classifier hook keeps per-file output, so the next
+occurrence is directly diagnosable).
+
+## Advisory verdict loss — `Verify advisory exit sidecars (fail-closed)`
+
+The four advisory steps in the `verify` job (`precommit`, K13, K12,
+`check_unit_tests`) record their exit code in `logs/*.exit`.
+`continue-on-error: true` keeps the job green, so when `errexit` swallows
+`status=$?` (or the step crashes or is skipped) the sidecar is never
+written and the verdict disappears without a red job. That happened before
+(measured: `logs/precommit.exit` absent while the K12/K13 sidecars existed).
+
+`check_advisory_exit_sidecars.py` closes that class:
+
+- **runtime** (`--dir logs`): every registered sidecar must exist and hold an
+  exit code (0–255). Missing/empty/unparseable = FAIL. The *value* is not
+  judged here — that is the producing gate's own verdict.
+- **static** (`--workflow …`): each registered sidecar must have exactly one
+  writer step, the step must be advisory (`continue-on-error` + `if:
+  always()`) and must catch the exit code errexit-safely (`set +e` …
+  `status=$?`, or the K12/K13 `if … then status=0; else status=$?; fi`
+  shape). Any `.exit` file written in the workflow must be registered in
+  `SIDECARS`, so a new verdict cannot be added unmonitored.
+
+When it goes red: fix the writer step's errexit shape or the missing step —
+do **not** delete the registry entry. A genuinely retired sidecar is removed
+from `SIDECARS` and from the workflow in the same commit; the static mode
+fails a stale registry entry (`no-writer`).
 ## Workflow dosyası değiştiren PR'lar: `workflow` scope'u ne zaman gerekir
 
 `.github/workflows/` altındaki bir dosyayı değiştirmek, taşıma yoluna göre

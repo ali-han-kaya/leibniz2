@@ -281,6 +281,11 @@ HOOK_COVERAGE = {
         "test_bootstrap_unit_coverage.py",
         "test_bootstrap_units_validate.py",
         "test_check_zero_check_fail_open.py",
+        "test_check_advisory_exit_sidecars.py",
+        "test_check_status_check_doc_sync.py",
+        "test_doc_protection_count.py",
+        "test_fail_closed_gates.py",
+        "test_plist_keepalive_golden.py",
     ],
 }
 
