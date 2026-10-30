@@ -237,9 +237,9 @@
   </div>
 </div>
 
-<!-- ═══════════════ ADIM 4 — Status checks (9 kapı) ═══════════════ -->
+<!-- ═══════════════ ADIM 4 — Status checks (16 kapı) ═══════════════ -->
 <div class="screen" id="screen-04">
-  <div class="caption"><span class="step">4</span> Require status checks — 9 check + up-to-date ✓ <span class="desc">status_checks.py --json'dan</span></div>
+  <div class="caption"><span class="step">4</span> Require status checks — 16 check + up-to-date ✓ <span class="desc">status_checks.py --json'dan</span></div>
   <div class="topbar"><div class="logo"><span class="mark">GH</span> GitHub</div><div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div></div>
   <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
   <div class="settings">
@@ -263,7 +263,7 @@
           <div class="expand">
             <input class="search" placeholder="Search by check name">
             <div class="check-list">
-              <div class="chk checked"><input type="checkbox" aria-label="Delivery verification — K1-K14 (single entry point)" checked><span>Delivery verification — K1-K14 (single entry point)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Delivery verification — K1-K19 (single entry point)" checked><span>Delivery verification — K1-K19 (single entry point)</span></div>
               <div class="chk checked"><input type="checkbox" aria-label="Action runtime check (node24)" checked><span>Action runtime check (node24)</span></div>
               <div class="chk checked"><input type="checkbox" aria-label="Budget shield (aggregated)" checked><span>Budget shield (aggregated)</span></div>
               <div class="chk checked"><input type="checkbox" aria-label="Pre-commit P0 label gate" checked><span>Pre-commit P0 label gate</span></div>
@@ -275,6 +275,10 @@
               <div class="chk checked"><input type="checkbox" aria-label="Commit-msg gate" checked><span>Commit-msg gate</span></div>
               <div class="chk checked"><input type="checkbox" aria-label="Config snapshot ↔ CONFIG_BASENAMES sync check" checked><span>Config snapshot ↔ CONFIG_BASENAMES sync check</span></div>
               <div class="chk checked"><input type="checkbox" aria-label="CI-SIMULATE (advisory)" checked><span>CI-SIMULATE (advisory)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="A11y gate (axe-core, fail-closed)" checked><span>A11y gate (axe-core, fail-closed)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="TeXLive acceptance — CI-linux pinned (fail-closed)" checked><span>TeXLive acceptance — CI-linux pinned (fail-closed)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Dashboard interaction E2E (node sandbox + Chromium CDP)" checked><span>Dashboard interaction E2E (node sandbox + Chromium CDP)</span></div>
+              <div class="chk checked"><input type="checkbox" aria-label="Plist P1 drift gate (fail-closed, Linux)" checked><span>Plist P1 drift gate (fail-closed, Linux)</span></div>
             </div>
             <div class="erow" style="margin-top:10px"><input type="checkbox" aria-label="Require branches to be up to date before merging (strict)" checked><span><b>Require branches to be up to date before merging</b> <span style="color:#656d76">(strict)</span></span></div>
           </div>
@@ -344,7 +348,7 @@
       <div class="field"><label>Branch name pattern</label><input type="text" aria-label="Branch name pattern" value="main" style="max-width:200px"></div>
       <div class="rules-label">Protect matching branches</div>
       <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require a pull request before merging" checked><div><div class="title">Require a pull request before merging</div></div></div></div>
-      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require status checks to pass before merging" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">9 status checks selected · strict</div></div></div></div>
+      <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Require status checks to pass before merging" checked><div><div class="title">Require status checks to pass before merging</div><div class="sub">16 status checks selected · strict</div></div></div></div>
       <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Do not allow bypassing the above settings" checked><div><div class="title">Do not allow bypassing the above settings</div></div></div></div>
       <div class="rule-item"><div class="row"><input type="checkbox" aria-label="Allow force pushes — Block" checked><div><div class="title">Allow force pushes — <b>Block</b></div></div></div></div>
       <div class="annot footer-bar">
@@ -359,7 +363,7 @@
 
 <!-- ═══════════════ ADIM 7 — Kural oluştu ═══════════════ -->
 <div class="screen" id="screen-07">
-  <div class="caption"><span class="step">7</span> Kural oluştu — liste: <code>main</code> <span class="desc">9 status checks · 1 approving review</span></div>
+  <div class="caption"><span class="step">7</span> Kural oluştu — liste: <code>main</code> <span class="desc">16 status checks · 1 approving review</span></div>
   <div class="topbar"><div class="logo"><span class="mark">GH</span> GitHub</div><div class="crumbs">ali-han-kaya <span class="sep">/</span> leibniz2</div></div>
   <div class="tabbar"><div class="tab">Code</div><div class="tab">Issues</div><div class="tab">Pull requests</div><div class="tab">Actions</div><div class="tab">Security</div><div class="tab active">Settings</div></div>
   <div class="settings">
@@ -380,7 +384,7 @@
       <div class="annot rule-card">
         <div>
           <div class="name">main</div>
-          <div class="desc">9 status checks · 1 approving review — All changes to branches matching this rule will be blocked.</div>
+          <div class="desc">16 status checks · 1 approving review — All changes to branches matching this rule will be blocked.</div>
         </div>
         <div class="actions"><span>Edit</span><span>Delete</span></div>
         <span class="badge">1</span>
@@ -394,10 +398,10 @@
   <div class="caption"><span class="step">8</span> Doğrula: status_checks.py --gh <span class="desc">AŞAMA 1 (b) adım 9</span></div>
   <div class="term">
     <div><span class="prompt">$</span> python3 _calisma/CIKTI/status_checks.py --gh</div>
-    <div class="dim">Beklenen status check adları (9) — kaynak: .github/workflows/verify.yml</div>
+    <div class="dim">Beklenen status check adları (16) — kaynak: .github/workflows/verify.yml</div>
     <div class="dim">&nbsp;&nbsp;1. Delivery verification — K1-K14 (single entry point)</div>
     <div class="dim">&nbsp;&nbsp;2. Action runtime check (node24)</div>
-    <div class="dim">&nbsp;&nbsp;… (9 kapı)</div>
+    <div class="dim">&nbsp;&nbsp;… (16 kapı)</div>
     <div>GitHub karşılaştırması: ali-han-kaya/leibniz2 (branch: main)</div>
     <div>&nbsp;&nbsp;[PASS] Action runtime check (node24)</div>
     <div>&nbsp;&nbsp;[PASS] Delivery verification — K1-K14 (single entry point)</div>
@@ -407,7 +411,7 @@
     <div>&nbsp;&nbsp;[PASS] enforce_admins.enabled (admin bypass kapalı)</div>
     <div>&nbsp;&nbsp;[PASS] allow_force_pushes.enabled == false</div>
     <div>&nbsp;&nbsp;[PASS] allow_deletions.enabled == false</div>
-    <div><span class="ok">SONUÇ: PASS — 9 check birebir eşleşiyor (workflow ↔ GitHub) ve merge engeli etkin</span></div>
+    <div><span class="ok">SONUÇ: PASS — 16 check birebir eşleşiyor (workflow ↔ GitHub) ve merge engeli etkin</span></div>
   </div>
 </div>
 

@@ -35,11 +35,22 @@ bayat kaldıysa veya isim çakışması varsa exit 1 (fail-closed).
       engeli smoke FAIL (fail-closed).
   2 — çalışma hatası (PyYAML yok, repo belirlenemedi).
 
-Not: CI'da değil yerel/publish aracıdır — branch protection okumak admin
-izni gerektirir, GITHUB_TOKEN'da yoktur.
+Branch protection okuması admin izni gerektirir ve `GITHUB_TOKEN` bu izni
+TAŞIMAZ. `administration` scope'u Actions `permissions:` bloğunda GEÇERSİZDIR
+(ölçüldü 2026-09-30, actionlint: "unknown permission scope administration" —
+eklenirse workflow PARSE HATASIYLA 0 job üretir). Bu yüzden okuma yetkisi
+KAPSAMLI bir PAT'ten gelir:
+
+  PROTECTION_PAT   (tercih; fine-grained, yalnız "Administration: read")
+  GH_ADMIN_TOKEN   (yedek isim — check_protection_drift.py ile aynı sözleşme)
+
+Token varsa `gh api .../protection` çağrısı YALNIZ o çağrı için `GH_TOKEN`
+olarak geçirilir (repo çözümlemesi ambient token'la kalır). Token yoksa/
+reddedilirse davranış DEĞİŞMEZ: verdict UNREADABLE, exit 1 — sessiz PASS yok.
 """
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -213,8 +224,33 @@ def format_contract(contract):
     return "\n".join(lines)
 
 
-def run_gh(args):
-    r = subprocess.run(args, capture_output=True, text=True)
+# Branch protection okuması için kapsamlı token isimleri (sırayla denenir).
+# check_protection_drift.py aynı isimleri kullanır — iki kapı TEK secret'la
+# yönetilir, ayrı bir "admin token" sözleşmesi doğmaz.
+PROTECTION_TOKEN_ENVS = ("PROTECTION_PAT", "GH_ADMIN_TOKEN")
+
+
+def protection_token(env=None):
+    """Kapsamlı koruma-okuma token'ı (yoksa None).
+
+    Yalnız `gh api .../protection` çağrısına verilir; repo çözümlemesi ve
+    diğer `gh` çağrıları ambient kimlikle kalır. Boşluklu/boş değer token
+    sayılmaz (CI'da kurulmamış secret boş string olarak gelir).
+    """
+    env = os.environ if env is None else env
+    for name in PROTECTION_TOKEN_ENVS:
+        value = env.get(name)
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
+def run_gh(args, token=None):
+    """`gh` çağır. `token` verilirse YALNIZ bu çağrı için GH_TOKEN olur."""
+    kwargs = {"capture_output": True, "text": True}
+    if token:
+        kwargs["env"] = {**os.environ, "GH_TOKEN": token}
+    r = subprocess.run(args, **kwargs)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip())
     return r.stdout.strip()
@@ -344,6 +380,11 @@ def main(argv=None):
             k: v for k, v in contract.items() if k != "all_jobs"},
     }
 
+    # Kapsamlı token varsa koruma okuması ONUNLA yapılır: GITHUB_TOKEN'ın
+    # `administration` izni yoktur, yani ambient token'la CI'da hep UNREADABLE
+    # dönerdi. Token yoksa çağrı bugünkü gibi ambient kimlikle koşar.
+    protection_pat = protection_token()
+
     if not contract["ok"]:
         # Fail-closed: advisory kontratı ihlali (örn. plist-check required'a
         # girmiş, bayat exclude, isim çakışması) — TÜM modlarda exit 1.
@@ -414,7 +455,8 @@ def main(argv=None):
         print(f"\nGitHub karşılaştırması: {repo} (branch: main)")
 
     try:
-        raw = run_gh(["gh", "api", f"repos/{repo}/branches/main/protection"])
+        raw = run_gh(["gh", "api", f"repos/{repo}/branches/main/protection"],
+                     token=protection_pat)
     except RuntimeError as e:
         # 404 = koruma GERÇEKTEN kurulu değil (NOT_SET_UP). Diğer hatalar
         # (403 yetki yok, ağ) koruma olabilir ama okunamadı — UYARI aynı
@@ -424,6 +466,9 @@ def main(argv=None):
         # exit 1 — yanlış-PASS vermez).
         err = str(e)
         is_404 = "404" in err or "Not Found" in err
+        if protection_pat:
+            err = (f"{err} [scoped token denendi: "
+                   f"{'/'.join(PROTECTION_TOKEN_ENVS)} — reddedildi/expired?]")
         gh_result["warning"] = err
         gh_result["verdict"] = "NOT_SET_UP" if is_404 else "UNREADABLE"
         if args.json:
@@ -435,6 +480,10 @@ def main(argv=None):
                   file=sys.stderr)
             print(f"\nUYARI: branch protection {label} — {e}")
             print("  Kurulum: gh api -X PUT repos/.../branches/main/protection")
+            if not protection_pat:
+                print("  Okuma izni: kapsamlı token verin — "
+                      "PROTECTION_PAT (Administration: read) "
+                      "veya GH_ADMIN_TOKEN; yoksa CI'da UNREADABLE normaldir.")
         sys.exit(1)
 
     try:

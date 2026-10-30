@@ -1,0 +1,155 @@
+# dashboard-devices-drift.yml — dashboard CIHAZ-paritesi smoke'u HAFTALIK.
+#
+# Neden bu dosya var: iki cihaz katmanı (`dashboard-smoke` Chromium/CDP +
+# `webkit-smoke` Safari) bugüne kadar yalnız push/pull_request koşumunda kanıt
+# üretiyordu. Panelin cihaz yüzeyindeki drift — statik varlık 404'ü (MIME),
+# CSP değişimi, seçici kayması, SSE kopması — o zaman ANCAK bir sonraki PR'da
+# kırmızıya dönüyordu; yani drift, kendisi PR'ı bloke ettikten sonra
+# öğreniliyordu. Bu workflow aynı iki katmanı haftalık cron'da koşar: drift
+# PR'a varmadan görünür olur.
+#
+# ADVISORY: bu workflow branch protection'ın required check listesine GİRMEZ
+# (status_checks.py sözleşmesi 16 check'te sabittir; buradaki job'lar o
+# listede yok). "Advisory" sessiz yeşil demek DEĞİLDİR: kanıt üretilemezse
+# (SKIP) ya da test kırmızıysa job KIRMIZI olur ve run listesinde görünür —
+# aksi halde eksik kurulumlu bir runner haftalık "başarılı" ama kanıtsız
+# koşum üretir ve cron'un tek amacı boşa çıkar (K5 sözleşmesi).
+#
+# Akış YAML'da yeniden yazılmaz: tek giriş noktası
+# `_calisma/CIKTI/dashboard_devices_smoke.sh` (K1 parite kuralı;
+# test_gated_schedules.py::TestDashboardDevicesSchedule bunu ölçer).
+name: dashboard-devices-drift
+
+on:
+  schedule:
+    # Haftalık: Pazartesi 04:29 UTC. Mevcut cron'larla çakışmaz
+    # (determinism-trend 03:17, docker-security 03:43, deploy-evidence 03:47,
+    # protection-drift 03:53, vercel-deploy-check aylık) — iki scheduled
+    # workflow aynı dakikaya düşerse kanıtlar birbirine karışır; çakışmayı
+    # test_gated_schedules ölçer.
+    - cron: '29 4 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Chromium/CDP cihaz katmanı (ubuntu) ────────────────────────────────
+  # Kapsam: hover tooltip + run-history filtreleri + Z3 lightbox (CDP),
+  # SSE/CSP render smoke, klavye-gezinme kapsamı. Kurulum verify.yml
+  # `dashboard-smoke` job'ının birebir aynısıdır (pin: playwright 1.63.0) —
+  # iki yerde ayrışırsa haftalık kanıt PR kanıtıyla karşılaştırılamaz.
+  chromium-devices:
+    name: Dashboard devices — Chromium/CDP (weekly, advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned Playwright
+        run: pip install playwright==1.63.0
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.63.0
+
+      - name: Install Chromium
+        run: playwright install --with-deps chromium
+
+      # Tek giriş noktası: katman seçimi + rapor + verdict script'in içinde.
+      # SKIP dönerse (tarayıcı çözülemedi) assert adımı job'ı kırmızıya çevirir.
+      - name: Run Chromium device-parity smoke
+        run: bash _calisma/CIKTI/dashboard_devices_smoke.sh --layer chromium
+
+      # SKIP kanıt sayılmaz: kurulum sessizce bozulursa haftalık job yeşil
+      # kalmasın (docker-security.yml K5 ile aynı sözleşme).
+      - name: Assert real run (SKIP is not evidence in CI)
+        run: |
+          set -euo pipefail
+          report="$GITHUB_WORKSPACE/.freebuff/sim/dashboard_devices/dashboard_devices_report.txt"
+          if [ ! -s "$report" ]; then
+            echo "FAIL: rapor yok — cihaz katmanı hiç koşmadı ($report)"
+            exit 1
+          fi
+          if ! grep -qx 'layer=chromium verdict=PASS' "$report"; then
+            echo "FAIL: Chromium katmanı verdict=PASS üretmedi (SKIP/FAIL → kanıt yok)"
+            grep -E '^(layer=|verdict=|SKIP:)' "$report" || true
+            exit 1
+          fi
+          echo "OK: layer=chromium verdict=PASS"
+
+      - name: Write Chromium devices report to run summary
+        if: always()
+        run: |
+          report="$GITHUB_WORKSPACE/.freebuff/sim/dashboard_devices/dashboard_devices_report.txt"
+          {
+            echo "## Dashboard devices — Chromium/CDP (weekly, advisory)"
+            echo ""
+            echo '```'
+            cat "$report" 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── WebKit/Safari cihaz katmanı (macOS) ───────────────────────────────
+  # Safedriver macOS runner'da hazır; Remote Automation `sudo safedriver
+  # --enable` ile açılır. Statik parite katmanı her ortamda koşar, live
+  # katman safedriver yoksa SKIP eder — bu yüzden assert adımı SKIP'i kırmızı
+  # sayar (aksi halde Safari paritesi hiç ölçülmeden yeşil görünür).
+  webkit-devices:
+    name: Dashboard devices — WebKit/Safari (weekly, advisory)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Enable Safari remote automation
+        run: |
+          sudo safedriver --enable 2>&1 | head -5 || true
+
+      - name: Run WebKit device-parity smoke
+        run: bash _calisma/CIKTI/dashboard_devices_smoke.sh --layer webkit
+
+      - name: Assert real run (SKIP is not evidence in CI)
+        run: |
+          set -euo pipefail
+          report="$GITHUB_WORKSPACE/.freebuff/sim/dashboard_devices/dashboard_devices_report.txt"
+          if [ ! -s "$report" ]; then
+            echo "FAIL: rapor yok — cihaz katmanı hiç koşmadı ($report)"
+            exit 1
+          fi
+          if ! grep -qx 'layer=webkit verdict=PASS' "$report"; then
+            echo "FAIL: WebKit katmanı verdict=PASS üretmedi (SKIP/FAIL → kanıt yok)"
+            grep -E '^(layer=|verdict=|SKIP:)' "$report" || true
+            exit 1
+          fi
+          echo "OK: layer=webkit verdict=PASS"
+
+      - name: Write WebKit devices report to run summary
+        if: always()
+        run: |
+          report="$GITHUB_WORKSPACE/.freebuff/sim/dashboard_devices/dashboard_devices_report.txt"
+          {
+            echo "## Dashboard devices — WebKit/Safari (weekly, advisory)"
+            echo ""
+            echo '```'
+            cat "$report" 2>/dev/null || echo '(rapor yok)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

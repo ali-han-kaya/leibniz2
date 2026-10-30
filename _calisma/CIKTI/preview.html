@@ -249,6 +249,9 @@
   .z3-tab[aria-selected="true"] { background:#2b2926; color:#f4efe5; border-color:#2b2926; box-shadow:0 4px 10px rgba(65,48,30,.2); }
   .z3-tab:hover, .z3-tab:focus-visible { outline:2px solid #b8874a; outline-offset:2px; }
   .z3-slides { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:18px; }
+  /* Yazar `display:grid` kuralı [hidden] UA kuralını EZER: bu satır olmadan
+     sekmesi kapalı tabpanel görünür kalır (kapat düğmesi yalan söyler). */
+  .z3-slides[hidden] { display:none; }
   .z3-slide { appearance:none; width:100%; cursor:zoom-in; text-align:left; background:#fffdf8; color:#2b2926; border:1px solid #d6cbb9; padding:10px 10px 28px; border-radius:1px; box-shadow:0 5px 12px rgba(65,48,30,.12); transform:rotate(-.35deg); transition:transform .2s ease, box-shadow .2s ease; }
   .z3-slide:nth-child(2n) { transform:rotate(.45deg); }
   .z3-slide:nth-child(3n) { transform:rotate(-.15deg); }

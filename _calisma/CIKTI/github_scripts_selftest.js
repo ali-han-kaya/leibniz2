@@ -12,6 +12,10 @@
 //   mock_context.json   — context nesnesi (issue/repo/runId/payload...)
 //   mock_labels.json    — issues.listLabelsOnIssue yanıtı (array)
 //   mock_comments.json  — issues.listComments yanıtı (array: [{id, body}])
+//   mock_env.json       — process.env üzerine yazılacak anahtarlar (değer
+//                         null ise anahtar SİLİNİR). Workflow'un adıma
+//                         geçirdiği env girdilerini (ör. TRIVY_SEVERITY)
+//                         senaryo bazında sınamak için.
 //
 // Stdout'a TEK JSON satırı yazar: {script, ok, error, setFailed, calls,
 // console}. Harness hatası yoksa exit 0 — gerçek PASS/FAIL kararını
@@ -39,6 +43,16 @@ function loadJson(name, fallback) {
   } catch (e) {
     process.stderr.write(`mock dosya bozuk (${name}): ${e}\n`);
     process.exit(2);
+  }
+}
+
+// Env override'ları VM'den ÖNCE uygulanır: script `process.env` okur ve
+// sandbox gerçek process nesnesini paylaşır.
+const envOverrides = loadJson('mock_env.json', null);
+if (envOverrides && typeof envOverrides === 'object') {
+  for (const [k, v] of Object.entries(envOverrides)) {
+    if (v === null) delete process.env[k];
+    else process.env[k] = String(v);
   }
 }
 

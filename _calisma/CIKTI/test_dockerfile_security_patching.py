@@ -22,6 +22,10 @@ güvenlik-yama desenini Dockerfile üzerinde sözleşme satırlarıyla sabitler:
      tuzağı dahil), overrides floor'ları (asla pin) + next doğrudan
      floor'u, lockfile'ın floor'ları karşıladığı (floor → lock uyumu)
      ve npm bölümünün doküman sözleşmesi.
+  9) CVE-defteri provenansı + parite: doküman tablosunun üstündeki
+     "Tek kaynak: Dockerfile" satırı ve tablo ↔ ARG default'u + yorum
+     defteri eşitliği (paket kümesi, floor, CVE kimlikleri). Tablo ikinci
+     doğruluk kaynağı değil, okunabilir kopya.
 
 Desen bozulursa (floor silinmesi, tüm-upgrade'e geçiş, hijyen kaybı,
 **/node_modules'in bare'a düşmesi) test fail eder → commit bloke olur
@@ -86,6 +90,73 @@ def _v(spec: str) -> tuple:
     while len(nums) < 3:
         nums.append(0)
     return tuple(nums)
+
+
+_CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}")
+_DOC_LEDGER_HEADING = "## CVE-defteri"
+
+
+def apt_floors(dockerfile: str) -> dict:
+    """`ARG SECURITY_PATCH_PACKAGES` default'u → {paket: floor}."""
+    m = re.search(r'^ARG SECURITY_PATCH_PACKAGES="([^"]*)"', dockerfile, re.M)
+    if not m:
+        raise AssertionError("ARG SECURITY_PATCH_PACKAGES default'u yok")
+    floors = {}
+    for token in m.group(1).split():
+        name, _, floor = token.partition("=")
+        if name:
+            floors[name] = floor
+    return floors
+
+
+def dockerfile_ledger_cves(dockerfile: str, packages) -> dict:
+    """Dockerfile yorum defteri → {paket: {CVE kimlikleri}}.
+
+    Segment mantığı: `#   <paket>: ...` satırı yeni bir kayıt açar, ardından
+    gelen yorum satırları o kaydın devamıdır. Böylece çok satıra yayılan
+    kayıt (libpcre2: iki CVE, biri parantez içinde devam satırında) tek
+    kayıtta toplanır; ARG satırı defter bloğunu kapatır.
+    """
+    out = {p: set() for p in packages}
+    current = None
+    for line in dockerfile.splitlines():
+        s = line.strip()
+        if not s.startswith("#"):
+            # Yalnız apt ARG satırı defter bloğunu kapatır: alt-dizi araması
+            # ("SECURITY_PATCH_PACKAGES=" in s) PYTHON_SECURITY_PATCH_PACKAGES
+            # satırına da takılır ve defteri boş bırakır.
+            if re.match(r"^ARG\s+SECURITY_PATCH_PACKAGES=", s):
+                break
+            continue
+        header = re.match(r"#\s+([A-Za-z0-9][A-Za-z0-9.+_-]*):\s*(.*)$", s)
+        if header:
+            current = header.group(1) if header.group(1) in out else None
+            if current:
+                out[current] |= set(_CVE_RE.findall(header.group(2)))
+        elif current:
+            out[current] |= set(_CVE_RE.findall(s))
+    return out
+
+
+def doc_ledger(doc: str) -> dict:
+    """`## CVE-defteri` tablosu → {paket: {'floor': str, 'cves': set}}."""
+    if _DOC_LEDGER_HEADING not in doc:
+        raise AssertionError("dokümanda '## CVE-defteri' bölümü yok")
+    section = doc.split(_DOC_LEDGER_HEADING, 1)[1].split("\n## ", 1)[0]
+    rows = {}
+    for line in section.splitlines():
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if len(cells) < 3 or cells[0] == "Paket" or set(cells[0]) <= set("-: "):
+            continue
+        floor_cell = cells[2].split()
+        rows[cells[0].strip("`")] = {
+            "floor": floor_cell[0] if floor_cell else "",
+            "cves": set(_CVE_RE.findall(cells[1])),
+        }
+    return rows
 
 
 class TestDockerfileSecurityPatching(unittest.TestCase):
@@ -293,6 +364,55 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
                           f"doküman sözleşmesi eksik: {token}")
         # Dockerfile dokümana bağlanmalı (keşfedilebilirlik).
         self.assertIn("docs/DOCKER_SECURITY_PATCHING.md", self._df)
+
+    def test_cve_ledger_doc_matches_dockerfile(self):
+        # Provenans sözleşmesi: doküman tablosu Dockerfile defterinin
+        # okunabilir kopyasıdır, ikinci doğruluk kaynağı değil. Tek taraflı
+        # düzenleme (paket ekleme, floor yükseltme, CVE kimliği düşürme)
+        # sessizce geçemez — üç alan da tek kaynaktan türetilip eşitlenir.
+        floors = apt_floors(self._df)
+        cves = dockerfile_ledger_cves(self._df, floors)
+        rows = doc_ledger(self._doc)
+        self.assertEqual(
+            sorted(rows), sorted(floors),
+            "doküman CVE-defteri ile Dockerfile ARG default'u ayrıştı "
+            "(paket kümesi): doküman=%s Dockerfile=%s"
+            % (sorted(rows), sorted(floors)))
+        for name, floor in floors.items():
+            self.assertEqual(
+                rows[name]["floor"], floor,
+                "%s: doküman floor'u Dockerfile floor'uyla eşleşmeli (%s != %s)"
+                % (name, rows[name]["floor"], floor))
+            self.assertEqual(
+                cves[name], rows[name]["cves"],
+                "%s: CVE kimlikleri ayrıştı (Dockerfile=%s doküman=%s)"
+                % (name, sorted(cves[name]), sorted(rows[name]["cves"])))
+
+    def test_cve_ledger_provenance_line(self):
+        # Tablonun üstündeki provenans satırı ikinci-kopya yasağını yazar;
+        # silinirse "hangi taraf doğru" sorusu geri döner (bu sınıfın kök
+        # nedeni). Satır guard testini de adlandırır ki testin kaldırılması
+        # dokümanda görünür bir sözleşme ihlali olsun.
+        section = self._doc.split(_DOC_LEDGER_HEADING, 1)[1].split("\n## ", 1)[0]
+        lines = section.splitlines()
+        starts = [i for i, ln in enumerate(lines)
+                  if ln.strip().startswith("> Tek kaynak:")]
+        self.assertTrue(starts, "CVE-defteri bölümünde '> Tek kaynak:' satırı yok")
+        # Blok alıntı birden çok satıra sarılabilir; provenans cümlesi
+        # bütün olarak okunmalı (tek satıra bakmak "`Dockerfile`" dışındaki
+        # kelimeleri kaçırır).
+        quote = []
+        for ln in lines[starts[0]:]:
+            if not ln.strip().startswith(">"):
+                break
+            quote.append(ln)
+        line = " ".join(ln.strip().lstrip("> ").strip() for ln in quote)
+        self.assertIn("`Dockerfile`", line,
+                      "provenans satırı Dockerfile'ı tek kaynak göstermeli: " + line)
+        self.assertIn("SECURITY_PATCH_PACKAGES", line,
+                      "provenans satırı ARG adını anmalı: " + line)
+        self.assertIn("test_cve_ledger_doc_matches_dockerfile", line,
+                      "provenans satırı guard testini adlandırmalı: " + line)
 
 
 class TestNpmSecurityLayerContract(unittest.TestCase):

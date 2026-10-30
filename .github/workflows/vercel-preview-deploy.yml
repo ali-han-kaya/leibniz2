@@ -43,6 +43,81 @@ jobs:
           npm install --global vercel@59.10.0
           vercel --version
 
+      # Token kapsamı ön kontrolü (fail-closed). Neden: `vercel link`
+      # düştüğünde Vercel yalnız "You do not have access to the specified
+      # account" + err.sh bağlantısı verir; logdan hangi hesaptan token
+      # üretileceği okunamaz (2026-10-24, run 40044149599). Bu adım dört
+      # durumu AYIRT eder ve düzeltmeyi adıyla söyler. Token hiçbir yere
+      # yazılmaz — yalnız HTTP durum kodları, hata kodu ve takım adları loga
+      # çıkar. Ölçülemeyen her durum KIRMIZI (sessiz PASS yok).
+      - name: Token kapsami on kontrolu (fail-closed)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          DOC="docs/VERCEL_DEPLOYMENT.md, Token bolumu"
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "::error::VERCEL_TOKEN secret yok — repo Settings > Secrets and variables > Actions > New secret. Token'i sarkis-env UYESI olan hesaptan uret ($DOC)."
+            exit 1
+          fi
+          rm -f /tmp/vercel_user.json
+          user_code=$(curl -s -o /tmp/vercel_user.json -w '%{http_code}' \
+            -H "Authorization: Bearer $VERCEL_TOKEN" https://api.vercel.com/v2/user)
+          user_verdict=$(python3 - "$user_code" <<'PY'
+          import json, sys
+          code = sys.argv[1]
+          try:
+              err = (json.load(open("/tmp/vercel_user.json")) or {}).get("error") or {}
+          except Exception:
+              err = {}
+          # Olculdu: Vercel OLU token'a 401 degil 403 + {"invalidToken": true}
+          # doner. 403'u kosulsuz "kapsam" saymak yanlis teshis uretir; tersine
+          # mesaj metnine bakmak ("not authorized") kapsam reddini olu token
+          # sanar. Bu yuzden karar YALNIZ yapisal sinyale baglidir:
+          # invalidToken bayragi veya 401 -> olu token, 403 (bayraksiz) -> kapsam.
+          if code == "200":
+              print("ok")
+          elif err.get("invalidToken") is True or code == "401":
+              print("invalid")
+          elif code == "403":
+              print("scope")
+          else:
+              print("unmeasured")
+          PY
+          )
+          case "$user_verdict" in
+            invalid)
+              echo "::error::VERCEL_TOKEN gecersiz veya suresi dolmus (GET /v2/user HTTP $user_code, invalidToken=true) — vercel.com/account/settings/tokens uzerinden yeni token uret, secret'i guncelle ($DOC)."
+              exit 1
+              ;;
+            scope)
+              echo "::error::VERCEL_TOKEN gecerli ama hesap kapsamina yetmiyor (GET /v2/user HTTP 403, invalidToken yok): project-only ya da daraltilmis token. Token kapsami 'sarkis-env' (Team) veya Full Account olmali ($DOC)."
+              exit 1
+              ;;
+            ok) ;;
+            *)
+              echo "::error::On kontrol olculemedi: GET /v2/user HTTP $user_code (fail-closed)."
+              exit 1
+              ;;
+          esac
+          rm -f /tmp/vercel_teams.json
+          teams_code=$(curl -s -o /tmp/vercel_teams.json -w '%{http_code}' \
+            -H "Authorization: Bearer $VERCEL_TOKEN" https://api.vercel.com/v2/teams)
+          if [ "$teams_code" != "200" ]; then
+            echo "::error::VERCEL_TOKEN takim listesini goremiyor (GET /v2/teams HTTP $teams_code). Project-only token kullanici/takim uclarina erisemez; kapsami 'sarkis-env' (Team) veya Full Account yap ($DOC)."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, sys
+          teams = (json.load(open("/tmp/vercel_teams.json")) or {}).get("teams") or []
+          names = {t.get("slug") or t.get("id") or "" for t in teams}
+          if "sarkis-env" not in names:
+              seen = ", ".join(sorted(n for n in names if n)) or "yok"
+              print("::error::VERCEL_TOKEN 'sarkis-env' takimini gormuyor (gorunen: %s). Token'i sarkis-env UYESI hesaptan uret ve kapsamini sarkis-env yap — --scope yetki VERMEZ, secer. Ayrinti: docs/VERCEL_DEPLOYMENT.md, Token bolumu." % seen)
+              sys.exit(1)
+          print("Token kapsami OK: sarkis-env gorunuyor (%d takim)." % len(teams))
+          PY
+
       - name: Proje linkle (non-interactive)
         run: |
           set -euo pipefail

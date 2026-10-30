@@ -686,6 +686,16 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-26 | fix | (changelog) heal bot PR kosumlarini onayla, dispatch yerine (#140) | [`8a62c96`](https://github.com/ali-han-kaya/leibniz2/commit/8a62c96) |
 | 2026-10-26 | fix | (changelog) approve yalniz bu commit'in kosumlarini onaylasin (#142) | [`65b4529`](https://github.com/ali-han-kaya/leibniz2/commit/65b4529) |
 | 2026-10-26 | chore | (determinism) backfill three missing weekly trend rows (#146) | [`ab2f461`](https://github.com/ali-han-kaya/leibniz2/commit/ab2f461) |
+| 2026-10-28 | docs | (deploy) record 2026-10-26 ab2f4610 run evidence (#151) | [`49fbf3e`](https://github.com/ali-han-kaya/leibniz2/commit/49fbf3e) |
+| 2026-10-28 | ci | (exclude) make every manifest exclusion an owned, documented claim (#150) | [`9b802db`](https://github.com/ali-han-kaya/leibniz2/commit/9b802db) |
+| 2026-10-28 | fix | (ci) feed Trivy gate inputs to the SARIF comment script (#154) | [`9f7a367`](https://github.com/ali-han-kaya/leibniz2/commit/9f7a367) |
+| 2026-10-28 | fix | (ci) stop reporting MEDIUM/LOW Trivy findings as HIGH blockers (#156) | [`e6ad9dd`](https://github.com/ali-han-kaya/leibniz2/commit/e6ad9dd) |
+| 2026-10-28 | docs | (deploy) kanit satiri e6ad9dd1 (trivy seviye duzeltmesi) (#158) | [`790cb7f`](https://github.com/ali-han-kaya/leibniz2/commit/790cb7f) |
+| 2026-10-29 | test | (battery) parallel runner, vacuous classifier, keyboard E2E (#160) | [`68b6239`](https://github.com/ali-han-kaya/leibniz2/commit/68b6239) |
+| 2026-10-29 | feat | (delivery) ledger-bound repack sidecar + reconciliation docs (#163) | [`f5d84fc`](https://github.com/ali-han-kaya/leibniz2/commit/f5d84fc) |
+| 2026-10-29 | feat | (ci) scoped protection token, sidecar gate, honest doc counts (#161) | [`2d022e0`](https://github.com/ali-han-kaya/leibniz2/commit/2d022e0) |
+| 2026-10-29 | docs | (deploy) kanit satiri f5d84fc5 (teslim PR #163) (#166) | [`163991a`](https://github.com/ali-han-kaya/leibniz2/commit/163991a) |
+| 2026-10-29 | feat | (dashboard) weekly device smoke, preview/a11y + Vercel fixes (#162) | [`0befd7b`](https://github.com/ali-han-kaya/leibniz2/commit/0befd7b) |
 
 ### Regresyon notları
 

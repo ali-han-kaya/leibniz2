@@ -48,7 +48,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 SCRIPTS_DIR = HERE / "github_scripts"
-WORKFLOW = HERE.parent.parent / ".github" / "workflows" / "verify.yml"
+WORKFLOWS_DIR = HERE.parent.parent / ".github" / "workflows"
+WORKFLOW = WORKFLOWS_DIR / "verify.yml"
 
 # ── SINIFLANDIRMA (explicit allowlist; yeni dosya = FAIL) ────────────────────
 GATE_SCRIPTS = {
@@ -172,6 +173,36 @@ def _wf_script_consumers(wf_text: str, script_name: str) -> set[str]:
                 consumers.add(job)
                 break
     return consumers
+
+
+# Gate script → karar parametrelerinin ÇAĞIRANDAN geldiği wiring.
+#
+# Kural: bir gate script'i eşiğini/seviyesini VARSAYMAZ; karar parametreleri
+# workflow'da TEK KEZ tanımlanır ve hem zorlayıcı tarama adımlarına (girdi)
+# hem gate script'inin adımına (env) geçer. Bu tablo üç yönü birden pin'ler:
+# job env'inde tek tanım, üretici adımların girdileri, tüketici adımın env'i —
+# artı script'in o env adlarını gerçekten okuduğu.
+GATE_ENV_WIRING: dict[str, dict] = {
+    "trivy_sarif_pr_comment.js": {
+        "workflow": "docker-security.yml",
+        "job": "image-scan",
+        # job env'inde tanımlı olması zorunlu anahtarlar
+        "job_env": ("TRIVY_SEVERITY", "TRIVY_IGNORE_UNFIXED"),
+        # zorlayıcı (enforcing) bacak: adım adı → {trivy-action girdisi: env}
+        "producers": {
+            "Scan image with Trivy (SARIF)": {
+                "severity": "TRIVY_SEVERITY",
+                "ignore-unfixed": "TRIVY_IGNORE_UNFIXED",
+            },
+            "Scan image with Trivy (table — log kanıtı)": {
+                "severity": "TRIVY_SEVERITY",
+                "ignore-unfixed": "TRIVY_IGNORE_UNFIXED",
+            },
+        },
+        # SARIF'i tüketen (script'i eval eden) adım
+        "consumer": "Annotate PR with Trivy findings (fail-closed)",
+    },
+}
 
 
 # Gate script → beklenen side-car artifact'ları (artifact adı → path).
@@ -315,6 +346,111 @@ class TestGateContracts(unittest.TestCase):
         used = set(re.findall(r"github_scripts/([a-z_]+\.js)", wf))
         unknown = sorted(used - (GATE_SCRIPTS | ADVISORY_SCRIPTS))
         self.assertFalse(unknown, f"verify.yml sınıflandırılmamış script tüketiyor: {unknown}")
+
+
+def _step_body(job_section: str, step_name: str) -> list[str] | None:
+    """Job bölümünde adı eşleşen adımın gövde satırları (yoksa None)."""
+    for name, body in _wf_steps(job_section):
+        if name == step_name:
+            return body
+    return None
+
+
+def _first_value(body: list[str], key: str) -> str | None:
+    """Adım gövdesinde `key: value` satırının değeri (ilk eşleşme)."""
+    pat = re.compile(r"^\s+%s:\s*(.+?)\s*$" % re.escape(key))
+    for line in body:
+        m = pat.match(line)
+        if m:
+            return m.group(1).strip("'\"")
+    return None
+
+
+class TestGateEnvWiring(unittest.TestCase):
+    """Gate karar parametreleri çağırandan gelir — varsayım yok.
+
+    Trivy PR yorum gate'i severity eşiğini eskiden script içinde sabit
+    tutuyordu (default 'HIGH'); enforcing bacak MEDIUM'a genişletilse bile
+    yorum/blok kümesi CRITICAL/HIGH kalıyordu. Sözleşme: job env'i tek
+    kaynak, hem tarama girdileri hem script env'i oradan beslenir.
+    """
+
+    def test_gate_env_wiring_scripts_are_classified_gates(self):
+        self.assertTrue(
+            set(GATE_ENV_WIRING) <= GATE_SCRIPTS,
+            f"env wiring tablosunda sınıflandırılmamış script: "
+            f"{sorted(set(GATE_ENV_WIRING) - GATE_SCRIPTS)}",
+        )
+
+    def test_gate_env_is_defined_once_and_forwarded(self):
+        problems: list[str] = []
+        for script, spec in GATE_ENV_WIRING.items():
+            wf_path = WORKFLOWS_DIR / spec["workflow"]
+            if not wf_path.exists():
+                problems.append(f"{script}: workflow yok ({spec['workflow']})")
+                continue
+            wf = wf_path.read_text(encoding="utf-8")
+            section = _wf_job_section(wf, spec["job"])
+            if not section:
+                problems.append(f"{script}: job bulunamadı ({spec['job']})")
+                continue
+
+            # 1) Job env'inde TEK KEZ, literal değerle tanımlı olmalı.
+            steps_pos = re.search(r"^    steps:\s*$", section, re.M)
+            head = section[: steps_pos.start()] if steps_pos else section
+            for key in spec["job_env"]:
+                m = re.search(r"^\s{6}%s:\s*(.+?)\s*$" % re.escape(key),
+                              head, re.M)
+                if not m:
+                    problems.append(
+                        f"{script}: job env'inde {key} yok (karar parametresi "
+                        f"çağırandan gelmeli)")
+                elif "${{" in m.group(1):
+                    problems.append(
+                        f"{script}: job env {key} ifadeye bağlı — tek kaynak "
+                        f"literal olmalı ({m.group(1).strip()})")
+
+            # 2) Enforcing (tarama) adımları aynı env'den beslenmeli.
+            for step_name, inputs in spec["producers"].items():
+                body = _step_body(section, step_name)
+                if body is None:
+                    problems.append(f"{script}: üretici adım yok ({step_name!r})")
+                    continue
+                for input_name, env_name in inputs.items():
+                    got = _first_value(body, input_name)
+                    want = "${{ env.%s }}" % env_name
+                    if got != want:
+                        problems.append(
+                            f"{script}/{step_name}: '{input_name}' = {got!r}, "
+                            f"beklenen {want!r} (literal eşik = drift)")
+
+            # 3) Script'i eval eden adım aynı env'i AÇIKÇA geçmeli.
+            body = _step_body(section, spec["consumer"])
+            if body is None:
+                problems.append(f"{script}: tüketici adım yok ({spec['consumer']!r})")
+            else:
+                for key in spec["job_env"]:
+                    got = _first_value(body, key)
+                    want = "${{ env.%s }}" % key
+                    if got != want:
+                        problems.append(
+                            f"{script}/{spec['consumer']}: env {key} = {got!r}, "
+                            f"beklenen {want!r}")
+
+        self.assertEqual(problems, [], "gate env wiring ihlalleri:\n" +
+                         "\n".join(problems))
+
+    def test_gate_script_reads_the_wired_env(self):
+        """Kapalı döngü: workflow env adları script'te de okunmalı (yoksa
+        "geçirdim" iddiası kâğıt üstünde kalır)."""
+        problems: list[str] = []
+        for script, spec in GATE_ENV_WIRING.items():
+            src = (SCRIPTS_DIR / script).read_text(encoding="utf-8")
+            for key in spec["job_env"]:
+                if f"process.env.{key}" not in src:
+                    problems.append(f"{script}: workflow {key} geçiriyor ama "
+                                    f"script process.env.{key} okumuyor")
+        self.assertEqual(problems, [], "\n".join(problems))
 
 
 class TestGateSidecarWiring(unittest.TestCase):
