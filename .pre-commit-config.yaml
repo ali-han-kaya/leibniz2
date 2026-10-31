@@ -504,6 +504,12 @@ repos:
           ad drift ederse commit bloke — `--write` sayıları ve EXCLUDE'ı
           düzeltir, ad listeleri elle güncellenir. OFFLINE, stdlib-only, ~0.3s.
         entry: python3 _calisma/CIKTI/check_status_check_doc_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-id-residual-doc-sync
         name: "Verify ID_RESIDUAL_ACCEPTANCE §4 ↔ donmuş sidecar (fail-closed)"
         description: >-
