@@ -79,6 +79,11 @@ GATE_SCRIPTS = (
     # beyaz liste kurali: iki cihaz katmani YAML'da yeniden yazilmaz, tek
     # giris noktasi bu script'tir (katman secimi + SKIP/FAIL verdict'i).
     "dashboard_devices_smoke.sh",
+    # 2026-10-31: haftalik docker-security cron kaniti + R4 satiri
+    # (docker-security-cron-evidence.yml). Ayni beyaz liste kurali: olcum ve
+    # yazma akisi YAML'da yeniden yazilmaz, tek giris noktasi bu script'tir
+    # (schedule kosumu secimi + fail-closed hüküm + isaretli parca yazimi).
+    "r4_cron_evidence.py",
 )
 
 

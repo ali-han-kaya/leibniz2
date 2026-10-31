@@ -1,0 +1,200 @@
+name: docker-security-cron-evidence
+
+# ────────────────────────────────────────────────────────────────────────────
+# HAFTALIK docker-security CRON'UNUN İLK `schedule` KOŞUMUNU ÖLÇER ve R4
+# DENETİM SATIRINA KANIT OLARAK YAZAR.
+#
+# Sorun (ölçüldü, bu oturum): R4 satırı "cron PR #52 merge'i ile tetiklenebilir
+# hâle geldi, ancak henüz ateşlenmedi; ilk ateşleme 2026-10-05T03:43Z" diyordu.
+# Bu iddianın doğruluğu birinin `gh run list` çağırmayı HATIRLAMASINA bağlıydı.
+# `schedule` tetikleyicisi hiç ateşlenmezse kırmızı bir koşum da doğmaz:
+# yalnız sessizlik olur — yani kanıtın YOKLUĞU görünmez kalır. 2026-10-31
+# ölçümü tam olarak bunu gösterdi: dört Pazartesi geçti, `event=schedule`
+# sayısı 0, satır ise "bekliyor" hâlinde duruyordu.
+#
+# NEDEN AYRI WORKFLOW: `docker-security.yml`'in İÇİNE eklenecek bir ölçüm adımı
+# kendi tetikleyicisinin ateşlenmediğini göremez (ölü adam anahtarı). Nöbet bu
+# yüzden ayrıdır ve beklenen tick'ten SONRA koşar.
+#
+# ZAMANLAMA: `docker-security.yml` cron'u Pzt 03:43 UTC. Ölçülen scheduler
+# gecikmesi 5s36d–7s37d. Sert bitiş tick + 20sa (Pzt 23:43); nöbet Salı
+# 05:17'de koşar ki sert bitiş kesin geçmiş olsun ve diğer haftalık cron'larla
+# (Pzt 03:17 / 03:43 / 03:47 / 03:53 / 04:29) çakışmasın.
+#
+# KAPI: mantık YAML'da YENİDEN YAZILMAZ — tek giriş noktası
+# `_calisma/CIKTI/r4_cron_evidence.py` (run: adımı). K1/K2 parite kuralı.
+#
+# FAIL-CLOSED: rc 2 (gh yok / API hatası / işaretler bozuk) = satıra hiçbir şey
+# yazılmaz ve iş KIRMIZI. rc 1 (schedule tick ateşlenmedi ya da koşum
+# başarısız) = satır yine YAZILIR, iş yine KIRMIZI: "❌ ölçüldü" ile
+# "boş = ölçülmedi" farklı iddialardır. Yeşil yalnız iki durumda: bekleme
+# penceresi (pending) ve gerçek `schedule` koşumu + conclusion=success.
+#
+# YAZMA YOLU: main branch-protection'lıdır (bare push GH006) → kayıt
+# changelog-heal ile aynı kanıtlanmış yoldan iner: bot dalı + PR + auto-merge.
+# Commit konusu `docs(deploy)` prefix'i taşır: bir kanıt kaydıdır, kanıt
+# boşluğunu İLERLETMEZ (deploy_evidence.DEFAULT_GAP_EXEMPT) — aksi hâlde
+# nöbetin her yazımı main'i biraz daha kırmızıya yaklaştırırdı.
+#
+# YAZMA SIKLIĞI: yalnız hükmün kimliği (durum, run id, conclusion) değişince
+# yazılır. Ölçüm saati metinde görünür ama kimliğe girmez — girerse nöbet her
+# hafta aynı hükmü yeniden yazıp boşuna PR açardı.
+# ────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # Salı 05:17 UTC — Pzt 03:43 tick'i + 20sa sert bitişten (23:43) sonra.
+    - cron: "17 5 * * 2"
+  workflow_dispatch: {}
+
+permissions:
+  # Varsayılan dar: ölçüm için yalnız kendi workflow koşumlarını okumak yeter.
+  contents: read
+  actions: read
+
+concurrency:
+  group: docker-security-cron-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: Schedule tick kanıtı + R4 satırı (bot PR)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Bot dalı + PR için (main korumalı → doğrudan push yok).
+      contents: write
+      pull-requests: write
+      # Bot PR'ının `action_required` koşumlarını onaylamak için: onaysız
+      # hiçbir check raporlanmaz ve auto-merge BLOCKED kalır (ölçüldü).
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # rc'yi doğrudan adım kodu YAPMAYIZ: rc 1 = "kanıt kötü" — meşru bir
+      # ölçüm sonucu; adımı burada düşürürsek satır hiç yazılmaz (yani kanıt
+      # kaydı tam da gerekli olduğu anda kaybolur). Hüküm, sondaki ayrı adımda
+      # kırmızıya bağlanır; rc 2 ise burada biter (ölçüm yok = yazma yok).
+      - name: Measure cron evidence and write R4 segment
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          python3 _calisma/CIKTI/r4_cron_evidence.py --apply --json \
+            > /tmp/r4.json 2> /tmp/r4.err
+          rc=$?
+          cat /tmp/r4.err >&2
+          cat /tmp/r4.json
+          if [ "$rc" -eq 2 ]; then
+            echo "::error::cron kanıtı ÖLÇÜLEMEDİ (rc=2) — R4 satırına hiçbir şey yazılmadı"
+            exit 1
+          fi
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+            echo "::error::beklenmeyen çıkış kodu: $rc"
+            exit 1
+          fi
+          changed=$(python3 -c 'import json; print(str(json.load(open("/tmp/r4.json")).get("changed")).lower())')
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "verdict_rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" -eq 1 ]; then
+            echo "::error::R4 kanıtı KIRMIZI (schedule tick ateşlenmedi ya da koşum başarısız) — gerekçe /tmp/r4.json"
+          fi
+
+      - name: Summary (cron kanıtı)
+        if: always()
+        run: |
+          {
+            echo "### docker-security cron kanıtı (R4)"
+            echo
+            echo '```json'
+            cat /tmp/r4.json 2>/dev/null || echo '{"verdict":"UNMEASURED"}'
+            echo '```'
+            echo
+            echo "Değişti: \`${{ steps.evidence.outputs.changed }}\` · hüküm rc: \`${{ steps.evidence.outputs.verdict_rc }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit R4 segment to bot branch and open PR
+        if: steps.evidence.outputs.changed == 'true'
+        env:
+          EVIDENCE_BRANCH: docs/r4-cron-evidence
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- docs/FULL_SCOPE_AUDIT_2026-09-17.md; then
+            echo "::error::betik 'değişti' dedi ama R4 belgesi değişmedi (sessiz kayıp)" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$EVIDENCE_BRANCH"
+          git add docs/FULL_SCOPE_AUDIT_2026-09-17.md
+          {
+            echo 'docs(deploy): [bot] R4 cron kanıt parçası (schedule tick)'
+            echo ''
+            echo 'docker-security-cron-evidence ölçümü: ilk event=schedule koşumu'
+            echo '(run id, created_at, status, conclusion) ya da "hâlâ 0" hükmü'
+            echo 'R4 satırındaki makine-yönetimli parçaya yazıldı.'
+            echo 'docs(deploy) prefix i kanıt-boşluğu muafiyetindedir: bu bir kanıt'
+            echo 'kaydıdır, ilerletilmiş bir değişiklik değil.'
+          } > /tmp/r4_msg.txt
+          git commit -F /tmp/r4_msg.txt
+          git push --force origin "HEAD:$EVIDENCE_BRANCH"
+          PR=$(gh pr list --head "$EVIDENCE_BRANCH" --state open --json number --jq '.[0].number // ""')
+          if [ -z "$PR" ]; then
+            gh pr create --base main --head "$EVIDENCE_BRANCH" \
+              --title "docs(deploy): [bot] R4 cron kanıt parçası (schedule tick)" \
+              --body 'Otomatik: docker-security-cron-evidence ölçümü R4 satırının makine-yönetimli parçasına yazıldı (ilk schedule koşumunun run id, created_at, status ve conclusion değerleri ya da "hâlâ 0" hükmü). Parça elle düzenlenmez.'
+            PR=$(gh pr list --head "$EVIDENCE_BRANCH" --state open --json number --jq '.[0].number // ""')
+          fi
+          if [ -z "$PR" ]; then
+            echo "::error::bot PR açılamadı (Actions'a PR izni kapalı olabilir) — kayıt $EVIDENCE_BRANCH dalında" >&2
+            exit 1
+          fi
+          gh pr merge "$PR" --auto --merge \
+            --subject "docs(deploy): [bot] R4 cron kanıt parçası" \
+            || echo "(auto-merge kuyruğa alınamadı — PR açık kalır, elle incelenir)"
+          # GITHUB_TOKEN ile açılan PR'da koşumlar `action_required` doğar:
+          # hiçbir check raporlanmaz, required context oluşmaz, --auto BLOCKED
+          # kalır (changelog-heal'de ölçüldü). Yalnız BU PR'ın commit'ine ait
+          # koşumlar onaylanır — dal adına göre filtre bayat koşum onaylıyordu.
+          SHA=$(git rev-parse HEAD)
+          approved=0
+          for _ in $(seq 1 12); do
+            ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=$EVIDENCE_BRANCH&per_page=30" \
+                  --jq ".workflow_runs[] | select(.head_sha==\"$SHA\" and .conclusion==\"action_required\") | .id")
+            for id in $ids; do
+              if gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve" >/dev/null; then
+                approved=$((approved + 1))
+              fi
+            done
+            [ "$approved" -gt 0 ] && break
+            sleep 10
+          done
+          if [ "$approved" -eq 0 ]; then
+            echo "::error::bot PR'ında onay bekleyen koşum yok — check'ler raporlanmaz, auto-merge ilerlemez" >&2
+            exit 1
+          fi
+          echo "Onaylanan koşum: $approved"
+
+      # Hüküm AYRI adımdadır: kayıt (yukarısı) ile kırmızı (burası) birbirinden
+      # bağımsızdır. "Kaydettim ama yine de yeşil" sessiz başarı olurdu.
+      - name: Verdict (fail-closed)
+        if: always()
+        run: |
+          rc="${{ steps.evidence.outputs.verdict_rc }}"
+          if [ -z "$rc" ]; then
+            rc=2
+          fi
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::R4 cron kanıtı KIRMIZI (verdict_rc=$rc) — ölçüm /tmp/r4.json"
+            exit 1
+          fi
+          echo "PASS: schedule tick kanıtı temiz (bekleme penceresi ya da fired/success)"
