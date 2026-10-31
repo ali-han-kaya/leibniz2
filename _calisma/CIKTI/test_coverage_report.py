@@ -289,6 +289,7 @@ HOOK_COVERAGE = {
         "test_repack_canonical_binding.py",
         "test_check_id_residual_doc_sync.py",
         "test_mutation_battery_canonical.py",
+        "test_r4_cron_evidence.py",
     ],
 }
 

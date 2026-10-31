@@ -131,6 +131,7 @@ test_preview_mirror_imports.py
 test_preview_server.py
 test_preview_server_atomic.py
 test_preview_stream_batching.py
+test_r4_cron_evidence.py
 test_rca_report.py
 test_readme_badges.py
 test_readme_skills.py
