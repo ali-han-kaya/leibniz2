@@ -696,6 +696,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-29 | feat | (ci) scoped protection token, sidecar gate, honest doc counts (#161) | [`2d022e0`](https://github.com/ali-han-kaya/leibniz2/commit/2d022e0) |
 | 2026-10-29 | docs | (deploy) kanit satiri f5d84fc5 (teslim PR #163) (#166) | [`163991a`](https://github.com/ali-han-kaya/leibniz2/commit/163991a) |
 | 2026-10-29 | feat | (dashboard) weekly device smoke, preview/a11y + Vercel fixes (#162) | [`0befd7b`](https://github.com/ali-han-kaya/leibniz2/commit/0befd7b) |
+| 2026-10-31 | feat | (ci) R4 cron kanıt bekçisi (schedule tick → R4 satırı) (#169) | [`dee683d`](https://github.com/ali-han-kaya/leibniz2/commit/dee683d) |
 
 ### Regresyon notları
 
