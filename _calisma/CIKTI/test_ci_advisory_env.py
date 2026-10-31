@@ -383,15 +383,28 @@ class TestGatesMustRunInACleanCheckout(unittest.TestCase):
         self.assertIn("skipTest", sibling)
 
     def test_partially_provisioned_checkout_skips_instead_of_failing(self):
-        """Somut kanıt: unit'leri gizleyince SKIP, FAIL değil."""
+        """Somut kanıt: unit'leri gizleyince SKIP, FAIL değil.
+
+        `REQUIRED` probe'ları sınıf tanımında BAĞLANIR (nesne olarak
+        `os.path.isdir`), bu yüzden `os.path.isdir`'ı yamamak etkisizdi:
+        tam kurulumlu makinede `missing` boş kalıyor, SkipTest hiç doğmuyor
+        ve test ORTAMA göre kırmızı/yeşil oluyordu (kısmi kurulumda yeşil,
+        tam kurulumda yanlış kırmızı). Burada probe'ların KENDİSİ "yok"
+        diye yamanıyor — ölçülen şey skip kontratı, dosya sistemi değil.
+        """
         mod = self._load()
         method = mod.TestCheckContract(
             "test_check_passes_on_provisioned_checkout")
-        with mock.patch.object(mod.os.path, "isdir", lambda p: False), \
-                mock.patch.object(mod.os.path, "isfile", lambda p: False):
+        hidden = tuple((name, path, (lambda _p: False))
+                       for name, path, _probe
+                       in mod.TestCheckContract.REQUIRED)
+        self.assertTrue(hidden, "REQUIRED boş — skip kontratı ölçülemez")
+        with mock.patch.object(mod.TestCheckContract, "REQUIRED", hidden):
             with self.assertRaises(unittest.SkipTest) as ctx:
                 method.test_check_passes_on_provisioned_checkout()
         self.assertIn("tam kurulum değil", str(ctx.exception))
+        # Skip mesajı EKSİK unit'i adıyla söylemeli (sessiz skip yasak).
+        self.assertIn(hidden[0][0], str(ctx.exception))
 
 
 class TestPreCommitHooksSurviveACleanCheckout(unittest.TestCase):
