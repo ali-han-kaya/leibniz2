@@ -24,6 +24,16 @@ atlandı) onun artifact'ları canlıda yok diye drift sayılmaz —
 çift cezalandırmasını (verify + advisory audit) önler. Producer'ı success
 iken eksik artifact hâlâ gerçek drift'tir (FAIL).
 
+ARTIFACT ayrıcalığı (advisory, producer-running): hâlâ KOŞAN bir job'ın
+artifact'ı canlıda henüz yoktur — bu bir ölçüm eksiği değil, üretimin
+bitmemiş olmasıdır. `conclusion` yalnız job tamamlanınca dolar (koşarken
+null), bu yüzden yalnız conclusion'a bakan sınıflama eksik artifact'ı "gerçek
+drift" sayıp fail-closed FAIL veriyordu. Producer'ın `status`'ü
+queued/in_progress/waiting/pending ise eksik artifact `producer_running`
+olarak raporlanır ve verdict'i bozmaz. Ayrıcalık YALNIZ pozitif kanıtla
+verilir: status okunamadıysa ya da producer tamamlanmışsa eksik artifact yine
+gerçek drift'tir (fail-closed) — "ölçemedim" asla muafiyet üretmez.
+
 PR-only job'lar push run'ında `skipped` görünür ama YİNE de job listesinde
 yer alır — bu yüzden isim eşleşmesi event'ten bağımsız çalışır.
 
@@ -376,6 +386,24 @@ def get_run_job_conclusions(repo, run_id):
     return {j.get("name"): j.get("conclusion") for j in jobs if j.get("name")}
 
 
+def get_run_job_statuses(repo, run_id):
+    """Run'daki job ad → `status` eşlemesi (queued/in_progress/completed).
+
+    `conclusion` job tamamlanmadan null kalır; "conclusion yok" ile "job
+    koşuyor" aynı şey DEĞİLDİR. Hâlâ koşan bir producer'ın artifact'ı henüz
+    yüklenmemiş olabilir — bu gerçek drift değildir. Bu yüzden sınıflama
+    ayrıca status okur; status okunamazsa sözlük boş döner ve sınıflama
+    fail-closed kalır (muafiyet yalnız pozitif kanıtla).
+    """
+    out = run_gh(["run", "view", str(run_id), "--repo", repo,
+                  "--json", "jobs", "-q", ".jobs"])
+    try:
+        jobs = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        jobs = []
+    return {j.get("name"): j.get("status") for j in jobs if j.get("name")}
+
+
 # ── Karşılaştırma ────────────────────────────────────────────────────────
 def compare(expected, live, label):
     exp = set(expected)
@@ -452,15 +480,41 @@ def _artifact_producer_map():
     return m
 
 
-def classify_artifact_drift(expected, live, conclusions=None):
-    """Eksik artifact'ları upstream-skipped vs gerçek drift olarak ayırır.
+# Job `status` değerleri: job HENÜZ TAMAMLANMADI (conclusion null kalır).
+# Bu durumda producer'ın artifact'ı henüz yüklenmemiş olabilir — eksikliği
+# "gerçek drift" saymak yanlış FAIL üretir. `completed` burada YOKTUR: bitmiş
+# job'ın eksik artifact'ı gerçek drift'tir (fail-closed).
+RUNNING_STATUSES = ("queued", "in_progress", "waiting", "pending",
+                    "requested")
+
+
+def _producer_running(producer, statuses):
+    """Producer hâlâ koşuyor mu? Yalnız POZİTİF kanıtla evet."""
+    if not producer:
+        return False
+    status = str(statuses.get(producer) or "").strip().lower()
+    return status in RUNNING_STATUSES
+
+
+def classify_artifact_drift(expected, live, conclusions=None, statuses=None):
+    """Eksik artifact'ları upstream-skipped / producer-running / gerçek drift.
 
     conclusions: {job name → conclusion} ("skipped", "failure", "success" …).
-    Producer'ı `skipped` olan eksik artifact'lar `upstream_skipped`'e gider
-    ve `ok`'u bozmaz — kırmızı verify → downstream skipped double-punish
-    etmez. Diğer tüm eksik/fazla gerçek drift'tir (fail-closed).
+    statuses: {job name → status} ("queued", "in_progress", "completed" …).
+
+    Ayrıcalıklar iki tanedir ve ikisi de `ok`'u bozmaz:
+      • `upstream_skipped` — producer `skipped` (kırmızı verify → downstream
+        atlandı); double-punish önlenir.
+      • `producer_running` — producer HÂLÂ KOŞUYOR (`conclusion` null),
+        artifact henüz yüklenmemiş olabilir. Bu ayrıcalık YALNIZ status
+        okunup koşuyor bilgisi geldiğinde verilir.
+
+    Geri kalan her eksik/fazla gerçek drift'tir (fail-closed): status
+    okunamadıysa, producer `completed` ise ya da producer bilinmiyorsa
+    eksik artifact FAIL üretir. "Ölçemedim" asla muafiyet değildir.
     """
     conclusions = conclusions or {}
+    statuses = statuses or {}
     exp = set(expected)
     liv = set(live)
     missing_raw = sorted(exp - liv)
@@ -468,15 +522,19 @@ def classify_artifact_drift(expected, live, conclusions=None):
     producer_map = _artifact_producer_map()
     missing = []
     upstream_skipped = []
+    producer_running = []
     for art in missing_raw:
         producer = producer_map.get(art)
-        if producer and conclusions.get(producer) == "skipped":
+        if _producer_running(producer, statuses):
+            producer_running.append(art)
+        elif producer and conclusions.get(producer) == "skipped":
             upstream_skipped.append(art)
         else:
-            # Fallback: conclusion bilinmiyor ama artifact zaten biliniyor —
-            # üretici skipped değilse gerçek drift.
+            # Fallback: conclusion/status bilinmiyor ama artifact zaten
+            # biliniyor — üretici koşmuyor ve skipped değilse gerçek drift.
             missing.append(art)
     upstream_skipped = sorted(upstream_skipped)
+    producer_running = sorted(producer_running)
     ok = not missing and not extra
     return {
         "label": "artifacts",
@@ -484,6 +542,7 @@ def classify_artifact_drift(expected, live, conclusions=None):
         "missing": missing,
         "extra": extra,
         "upstream_skipped": upstream_skipped,
+        "producer_running": producer_running,
     }
 
 
@@ -587,6 +646,12 @@ def main(argv=None):
             conclusions = get_run_job_conclusions(repo, run_id)
         except RuntimeError:
             conclusions = {}
+        # Status okunamazsa (gh hatası/boş yanıt) sözlük boş kalır — sınıflama
+        # fail-closed davranır: koşuyor kanıtı yoksa eksik artifact drift'tir.
+        try:
+            statuses = get_run_job_statuses(repo, run_id)
+        except RuntimeError:
+            statuses = {}
     except RuntimeError as e:
         print(f"HATA: canlı veri çekilemedi ({e})", file=sys.stderr)
         return 2
@@ -600,13 +665,18 @@ def main(argv=None):
 
     doc_job_names = [n for (_cat, n) in doc_jobs]
     job_cmp = compare(doc_job_names, live_jobs, "jobs")
-    art_cmp = classify_artifact_drift(doc_artifacts, live_artifacts, conclusions)
+    art_cmp = classify_artifact_drift(doc_artifacts, live_artifacts,
+                                      conclusions, statuses)
 
     # Sabitlenmiş artifact varlığı (doc + live) — fail-closed kapı.
-    # Advisory için upstream-skipped durumu true missing sayılmaz: kırmızı
-    # verify → needs:[verify] artifact'ları skipped → python3-shell canlıda
-    # yoksa bile double-punish olmamalı. Pinned kapı yalnızca producer
-    # skipped değilken eksikse FAIL verir.
+    # Muafiyet iki tanedir ve ikisi de POZİTİF kanıt ister: producer
+    # `skipped` (kırmızı verify → `needs:[verify]` downstream atlandı) ya da
+    # producer HÂLÂ KOŞUYOR (`conclusion` henüz null, artifact yüklenmemiş
+    # olabilir). Aksi halde eksiklik FAIL'dir.
+    # Not: iki çağrı da kendi listesini geçirir — check_required_presence(X, X)
+    # canlı eksiğini hem "(doc)" hem "(live)" etiketiyle üretir; bu yüzden
+    # aşağıdaki döngü canlı eksiğini etiketten bağımsız olarak producer
+    # durumuna göre eler.
     _req_doc_missing = check_required_presence(doc_artifacts, doc_artifacts)
     _req_live_raw = check_required_presence(live_artifacts, live_artifacts)
     # Her pinned için producer conclusion'a bak
@@ -615,8 +685,12 @@ def main(argv=None):
     for art, side in _req_doc_missing:
         req_missing.append((art, side))
     for art, side in _req_live_raw:
-        # side her zaman "live" burada (live_raw doc==live)
+        # Canlı taraf: producer koşuyor/skipped ise muaf (yukarıdaki nota bkz.)
         prod = producer_map.get(art)
+        # Producer koşuyorsa artifact henüz yüklenmemiş olabilir; sabitlenmiş
+        # kapı da aynı pozitif-kanıt kuralıyla muaf tutar.
+        if _producer_running(prod, statuses):
+            continue
         if prod and conclusions.get(prod) == "skipped":
             continue
         req_missing.append((art, side))
@@ -642,6 +716,7 @@ def main(argv=None):
             "missing": art_cmp["missing"],
             "extra": art_cmp["extra"],
             "upstream_skipped": art_cmp.get("upstream_skipped", []),
+            "producer_running": art_cmp.get("producer_running", []),
             "required_presence": {
                 "ok": not req_missing,
                 "missing": [f"{art} ({side})" for art, side in req_missing],
@@ -674,6 +749,10 @@ def main(argv=None):
 
     print(f"Canlı CI denetimi — {repo} (run {run_id})")
     print(f"doc: {doc_path}")
+    if art_cmp.get("producer_running"):
+        # Sessiz muafiyet YOK: ölçülemeyen kuyruk açıkça yazılır.
+        print("  koşuyor (artifact henüz yok): "
+              + ", ".join(art_cmp["producer_running"]))
     print(f"\nSONUÇ: {verdict} — {'doc ↔ GitHub senkron' if ok else 'DRIFT'}")
     hard_fail = (not ok or bool(_non_self_deterministic(failure_result)))
     return 0 if not hard_fail else 1
