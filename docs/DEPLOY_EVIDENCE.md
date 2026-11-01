@@ -378,3 +378,20 @@ Eşik `--warn-head-gap` (varsayılan 2 = `--max-head-gap` − 1); `0` ile kapat�
 | 2026-10-26 | ab2f4610 | [success #40369559401](https://github.com/ali-han-kaya/leibniz2/actions/runs/40369559401) | [success #40369558837](https://github.com/ali-han-kaya/leibniz2/actions/runs/40369558837) | [success #40369558733](https://github.com/ali-han-kaya/leibniz2/actions/runs/40369558733) | [success #40296221973](https://github.com/ali-han-kaya/leibniz2/actions/runs/40296221973) |
 | 2026-10-28 | e6ad9dd1 | [success #40767933601](https://github.com/ali-han-kaya/leibniz2/actions/runs/40767933601) | [success #40767933733](https://github.com/ali-han-kaya/leibniz2/actions/runs/40767933733) | [success #40767933855](https://github.com/ali-han-kaya/leibniz2/actions/runs/40767933855) | [success #40296221973](https://github.com/ali-han-kaya/leibniz2/actions/runs/40296221973) |
 | 2026-10-29 | f5d84fc5 | [success #40815873871](https://github.com/ali-han-kaya/leibniz2/actions/runs/40815873871) | [success #40815873866](https://github.com/ali-han-kaya/leibniz2/actions/runs/40815873866) | [success #40815873883](https://github.com/ali-han-kaya/leibniz2/actions/runs/40815873883) | [success #40296221973](https://github.com/ali-han-kaya/leibniz2/actions/runs/40296221973) |
+
+`cf434244` — PR #174 (`docs(texlive): Faz 0-1 kapanışını ölçülen kanıtlarla
+işaretle`) merge'ü: `f5d84fc5` satırının üstüne **4 anlamlı** commit geldi
+(`caeeba03` docs, `8c50383c` `chore(changelog)` — `[bot]` öneki yok, sayılır,
+`cf434244` merge; tolerans 3) → `verify-delivery` #41343495226 kırmızı,
+**yalnız** `test_deploy_evidence.test_cli_accepts_repo_ledger_offline`
+(3580 testte 1 FAIL; diğer 3579 PASS, 76 skip). Kırmızının kökü kod değil
+boşluk: PR'ın iki commit'i + merge, son `f5d84fc5` satırından bu yana 4
+anlamlı commit. Bu `docs(deploy)` satırı boşluğu **0**'a çekiyor
+(`substantive_gap(cf434244, main)` = 0; satırı yazan commit ve merge'ü de
+`docs(deploy)` → exempt). Hücreler `event=push`, `headSha=cf434244`:
+`verify-delivery` #41343495226 (**failure** — bu satırın kapattığı boşluk;
+ilk ve tek kırmızı), `docker-security` #41343495088, `test-smoke`
+#41343495173 (success), `determinism-trend` hücresi son main ölçümünü taşır
+(#40296221973, `headSha=4973873`, 2026-10-26 haftalık success). Satırın
+merge'ünden sonraki push, doğrulamayı yeni HEAD'de yeniden koşar.
+| 2026-11-01 | cf434244 | [failure #41343495226](https://github.com/ali-han-kaya/leibniz2/actions/runs/41343495226) | [success #41343495088](https://github.com/ali-han-kaya/leibniz2/actions/runs/41343495088) | [success #41343495173](https://github.com/ali-han-kaya/leibniz2/actions/runs/41343495173) | [success #40296221973](https://github.com/ali-han-kaya/leibniz2/actions/runs/40296221973) |
