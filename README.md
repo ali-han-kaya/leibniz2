@@ -698,6 +698,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-29 | feat | (dashboard) weekly device smoke, preview/a11y + Vercel fixes (#162) | [`0befd7b`](https://github.com/ali-han-kaya/leibniz2/commit/0befd7b) |
 | 2026-10-31 | feat | (ci) R4 cron kanıt bekçisi (schedule tick → R4 satırı) (#169) | [`dee683d`](https://github.com/ali-han-kaya/leibniz2/commit/dee683d) |
 | 2026-10-01 | docs | (texlive) Faz 0-1 kapanışını ölçülen kanıtlarla işaretle | [`caeeba03`](https://github.com/ali-han-kaya/leibniz2/commit/caeeba03) |
+| 2026-11-01 | docs | (deploy) cf434244 kanit satirini ekle, gap 4'ten 0'a | [`6ced9cb`](https://github.com/ali-han-kaya/leibniz2/commit/6ced9cb) |
+| 2026-11-01 | chore | (changelog) caeeba03 satirini tabloya ekle | [`8c50383`](https://github.com/ali-han-kaya/leibniz2/commit/8c50383) |
 
 ### Regresyon notları
 
