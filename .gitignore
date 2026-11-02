@@ -23,7 +23,17 @@ _calisma/.venv_z3
 .agents/
 
 # OS artıkları: macOS Finder meta verisi (her dizinde kendiliğinden oluşur)
+# `.DS_Store` ayraçsız desen olduğundan HER derinlikte eşleşir — kök, nested
+# dizinler ve worktree kopyaları dahil; `**/.DS_Store` bunu açıkça sabitler.
 .DS_Store
+**/.DS_Store
+
+# macOS kopyalama/unzip ikinci kopyaları: AppleDouble yan dosyaları (`._*`,
+# ör. `._.DS_Store` — `.DS_Store`'un copy/paste ile çoğalan ikinci kopyası) ve
+# `unzip`'in ürettiği `__MACOSX/` dizini. Worktree'ler arası kopyalamada da
+# oluşur; kaynak DEĞİLDİR.
+__MACOSX/
+._*
 
 # Yerel çalışma logları (temiz kopyada üretilir; kanıt raporları docs/ci_simulate/
 # veya git-takipli karşılıklarında yaşar — buradaki kopya kaynak değil)
