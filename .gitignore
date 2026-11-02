@@ -84,3 +84,34 @@ apps/dashboard-next/.next/
 # (sonu '/' olmayan kural: node_modules SYMLINK'i de yakalar —
 # 'beyond a symbolic link' tuzaği, 2026-10-09)
 node_modules
+
+# macOS unzip/archive artifacts: AppleDouble side files and __MACOSX/
+__MACOSX/
+._*
+
+# Ruflo / Claude Flow runtime: configuration is source, runtime is generated
+.claude-flow/*
+!.claude-flow/.gitignore
+!.claude-flow/config.yaml
+!.claude-flow/CAPABILITIES.md
+.claude/
+
+# Generated build/run surfaces reconciled from the desktop checkout (2026-11-02)
+_calisma/docx/node_modules/
+_calisma/docx/out/
+_calisma/pptx/architecture_deepening.pptx
+_calisma/pptx/pdf_repro_findings.pptx
+_calisma/video/.remotion/
+_calisma/video/public/data/
+pinokio/.runtime/
+_calisma/CIKTI/a11y_report*.json
+/a11y-reports/
+/pyproject.toml
+/uv.lock
+check_unit_tests.json
+
+# Another repo's audit drop; not leibniz2 source
+_calisma/TOOLKIT/
+
+# Templates are source, not secrets
+!.env.example
