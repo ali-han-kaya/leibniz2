@@ -56,9 +56,11 @@ HERE = pathlib.Path(__file__).resolve().parent
 HTML = HERE / "preview.html"
 SERVER_SCRIPT = HERE / "preview_server.py"
 
-# Sunucu başlatma bütçesi: soğuk macOS CI runner'ında 15s yetmiyordu
-# (ölçülen: live katman "preview_server başlamadı" ile SKIP'e düşüyordu).
-SERVER_START_TIMEOUT_S = 30.0
+# Sunucu başlatma bütçesi: CI runner'ında 30s de yetmedi (ölçülen: SKIP).
+# `ThreadingHTTPServer` bind'ı `socket.getfqdn` için ters DNS yapar; CI'da
+# bu çağrı onlarca saniye bekleyebiliyor. Smoke yalnız *serving* yüzeyine
+# ihtiyaç duyar, bu yüzden bütçe ölçülmüş maliyeti kapsayacak kadar geniş.
+SERVER_START_TIMEOUT_S = 120.0
 SERVER_LOG_TAIL_LINES = 8
 
 SAFARIDRIVER_CANDIDATES = [
@@ -206,11 +208,14 @@ class WebkitSmokeLiveBase(unittest.TestCase):
              "--preview-dir", str(HERE), "--port", str(cls.PORT),
              "--bind", "127.0.0.1", "--interval", "3600"],
             cwd=str(HERE), stdout=cls.server_log, stderr=subprocess.STDOUT)
+        started_at = time.monotonic()
         if not wait_for_port(cls.PORT, timeout=SERVER_START_TIMEOUT_S):
+            elapsed = time.monotonic() - started_at
             detail = log_tail(cls.server_log.name)
             sys.stderr.write("preview_server günlüğü: %s\n" % detail)
             raise unittest.SkipTest(
-                "preview_server başlamadı (env) — gerekçe: %s" % detail)
+                "preview_server başlamadı (%.0fs, süreç canlı=%s) — gerekçe: %s"
+                % (elapsed, cls.server.poll() is None, detail))
         try:
             cls.driver = WebDriver(cls.driver_port)
             cls.driver.new_session()
