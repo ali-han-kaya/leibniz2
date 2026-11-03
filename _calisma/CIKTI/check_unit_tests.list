@@ -130,6 +130,7 @@ test_preview_findings_panel.py
 test_preview_mirror_imports.py
 test_preview_server.py
 test_preview_server_atomic.py
+test_preview_server_drain_subprocess.py
 test_preview_stream_batching.py
 test_r4_cron_evidence.py
 test_rca_report.py
