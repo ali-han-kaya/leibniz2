@@ -2934,12 +2934,12 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────
   # WEBKIT-SMOKE (advisory) — Safari/WebKit-parite dashboard smoke.
   #
-  # safedriver tabanlı WebKit koşumu (Chromium-only QA'nın parite kanıtı):
+  # safaridriver tabanlı WebKit koşumu (Chromium-only QA'nın parite kanıtı):
   # Safari'de açılış + ana panel render (#status-board/#m-verdict/#badges,
   # 2 tab, 13 galeri öğesi, 2 tabpanel, run-history) + sayfa-içi hata
-  # toplayıcıyla console-hata-yok. macOS runner'da Safari + safedriver
-  # mevcut; Remote Automation CI'da `sudo safedriver --enable` ile açılır.
-  # Statik katman her ortamda koşar — live katman safedriver yoksa SKIP
+  # toplayıcıyla console-hata-yok. macOS runner'da Safari + safaridriver
+  # mevcut; Remote Automation CI'da `sudo safaridriver --enable` ile açılır.
+  # Statik katman her ortamda koşar — live katman safaridriver yoksa SKIP
   # (fail-closed değil; advisory: parite kanıtı macOS'te toplanır).
   # ──────────────────────────────────────────────────────────────────────
   webkit-smoke:
@@ -2961,7 +2961,7 @@ jobs:
 
       - name: Enable Safari remote automation
         run: |
-          sudo safedriver --enable 2>&1 | head -5 || true
+          sudo safaridriver --enable 2>&1 | head -5 || true
 
       - name: Run WebKit dashboard smoke
         id: smoke

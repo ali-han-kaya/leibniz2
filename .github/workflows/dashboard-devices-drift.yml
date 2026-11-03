@@ -103,9 +103,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── WebKit/Safari cihaz katmanı (macOS) ───────────────────────────────
-  # Safedriver macOS runner'da hazır; Remote Automation `sudo safedriver
-  # --enable` ile açılır. Statik parite katmanı her ortamda koşar, live
-  # katman safedriver yoksa SKIP eder — bu yüzden assert adımı SKIP'i kırmızı
+  # Safari'nin WebDriver'ı `safaridriver` macOS runner'da /usr/bin'de hazır;
+  # Remote Automation `sudo safaridriver --enable` ile açılır. Statik parite
+  # katmanı her ortamda koşar, live katman safaridriver yoksa SKIP eder — bu
+  # yüzden assert adımı SKIP'i kırmızı
   # sayar (aksi halde Safari paritesi hiç ölçülmeden yeşil görünür).
   webkit-devices:
     name: Dashboard devices — WebKit/Safari (weekly, advisory)
@@ -122,7 +123,7 @@ jobs:
 
       - name: Enable Safari remote automation
         run: |
-          sudo safedriver --enable 2>&1 | head -5 || true
+          sudo safaridriver --enable 2>&1 | head -5 || true
 
       - name: Run WebKit device-parity smoke
         run: bash _calisma/CIKTI/dashboard_devices_smoke.sh --layer webkit
