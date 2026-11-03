@@ -46,6 +46,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 import urllib.error
@@ -54,6 +55,11 @@ import urllib.request
 HERE = pathlib.Path(__file__).resolve().parent
 HTML = HERE / "preview.html"
 SERVER_SCRIPT = HERE / "preview_server.py"
+
+# Sunucu başlatma bütçesi: soğuk macOS CI runner'ında 15s yetmiyordu
+# (ölçülen: live katman "preview_server başlamadı" ile SKIP'e düşüyordu).
+SERVER_START_TIMEOUT_S = 30.0
+SERVER_LOG_TAIL_LINES = 8
 
 SAFARIDRIVER_CANDIDATES = [
     os.environ.get("SAFARIDRIVER_BIN"),
@@ -76,6 +82,20 @@ def find_safaridriver():
         if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
     return None
+
+
+def log_tail(path, lines=SERVER_LOG_TAIL_LINES):
+    """Sunucu günlüğünün son satırları — SKIP'in NEDENİ görünür olsun.
+
+    stderr'in DEVNULL'a gitmesi bu smoke'un ilk kırmızısını teşhis edilemez
+    hale getirmişti; artık başlatma başarısız olursa gerekçe skip mesajında.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            content = [ln.strip() for ln in f if ln.strip()]
+    except OSError:
+        return "(günlük okunamadı)"
+    return " | ".join(content[-lines:]) or "(günlük boş)"
 
 
 def free_port():
@@ -179,13 +199,18 @@ class WebkitSmokeLiveBase(unittest.TestCase):
         cls.driver_port = free_port()
         cls.driver_proc = start_safaridriver(cls.safaridriver_bin, cls.driver_port)
         cls.PORT = free_port()
+        cls.server_log = tempfile.NamedTemporaryFile(
+            "w+", prefix="webkit_preview_server_", suffix=".log", delete=False)
         cls.server = subprocess.Popen(
             [sys.executable, str(SERVER_SCRIPT), "--dir", str(HERE),
              "--preview-dir", str(HERE), "--port", str(cls.PORT),
              "--bind", "127.0.0.1", "--interval", "3600"],
-            cwd=str(HERE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if not wait_for_port(cls.PORT, timeout=15):
-            raise unittest.SkipTest("preview_server başlamadı (env)")  # pragma: no cover
+            cwd=str(HERE), stdout=cls.server_log, stderr=subprocess.STDOUT)
+        if not wait_for_port(cls.PORT, timeout=SERVER_START_TIMEOUT_S):
+            detail = log_tail(cls.server_log.name)
+            sys.stderr.write("preview_server günlüğü: %s\n" % detail)
+            raise unittest.SkipTest(
+                "preview_server başlamadı (env) — gerekçe: %s" % detail)
         try:
             cls.driver = WebDriver(cls.driver_port)
             cls.driver.new_session()
@@ -204,6 +229,13 @@ class WebkitSmokeLiveBase(unittest.TestCase):
             cls.driver_proc.terminate()
         if getattr(cls, "server", None) is not None:
             cls.server.terminate()
+        log_file = getattr(cls, "server_log", None)
+        if log_file is not None:
+            try:
+                log_file.close()
+                os.unlink(log_file.name)
+            except OSError:
+                pass
 
     def _load_with_collector(self):
         base = f"http://127.0.0.1:{self.PORT}"
