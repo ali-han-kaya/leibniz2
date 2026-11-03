@@ -78,6 +78,10 @@ HOOK_COVERAGE = {
     # fail-closed): testi tazelik/bayat/ölçüm-imkânsız ayrımını ve config
     # `files:` teli dört yolu da kapsıyor mu sözleşmesini çiviler.
     "check-verify-jobs-map":    ["test_check_verify_jobs_map.py"],
+    # LaTeX yüzey kapısı: $$ yasağı + input-graph kapsamlı label/\input
+    # bütünlüğü. Testi pozitif/negatif senaryoyu ve pre-commit+CI
+    # kablolamasını çiviler.
+    "check-latex-surface":      ["test_check_latex_surface.py"],
     "check-unit-tests": [
         "test_workflow_install_hardening.py",
         "test_verify_refs.py",
@@ -290,6 +294,7 @@ HOOK_COVERAGE = {
         "test_check_id_residual_doc_sync.py",
         "test_mutation_battery_canonical.py",
         "test_r4_cron_evidence.py",
+        "test_check_latex_surface.py",
     ],
 }
 
