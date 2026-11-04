@@ -600,7 +600,7 @@ class TestScopedProtectionToken(unittest.TestCase):
         return code, buf.getvalue()
 
     def test_protection_read_uses_the_scoped_token(self):
-        protection = _protection(contexts=list(sc.gate_jobs().values()))
+        protection = _protection(contexts=list(sc.expected_checks()))
         with self._only_env(PROTECTION_PAT="pat-1"), \
                 mock.patch.object(sc, "run_gh",
                                   return_value=json.dumps(protection)) as run:

@@ -200,7 +200,7 @@ GATE_ENV_WIRING: dict[str, dict] = {
             },
         },
         # SARIF'i tüketen (script'i eval eden) adım
-        "consumer": "Annotate PR with Trivy findings (fail-closed)",
+        "consumer": "Annotate PR with Trivy findings (report-only)",
     },
 }
 

@@ -386,10 +386,12 @@ class RealTreeTest(unittest.TestCase):
             capture_output=True, text=True, cwd=ROOT)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         payload = json.loads(r.stdout)
-        cli_ids = set(payload["gate_jobs"])
+        # Required sözleşmesi iki kaynaklıdır (verify + docker-security);
+        # operatörün kopyaladığı liste `checks`'tir.
+        cli_ids = set(payload["checks"])
         self.assertEqual(
-            cli_ids, set(gate._gate_job_ids(ROOT)),
-            "status_checks CLI `gate_jobs` ↔ kapının türetimi ayrıştı")
+            cli_ids, set(self.derived["required_names"]),
+            "status_checks CLI `checks` ↔ kapının türetimi ayrıştı")
         self.assertEqual(len(cli_ids), self.derived["required"],
                          "CLI required sayısı türetimle uyuşmuyor")
 
