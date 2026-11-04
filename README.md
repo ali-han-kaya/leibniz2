@@ -703,13 +703,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-03 | test | (preview-server) drain için subprocess regresyon testi | [`549ace0`](https://github.com/ali-han-kaya/leibniz2/commit/549ace0) |
 | 2026-11-03 | docs | (deploy) [bot] R4 cron kanıt parçası (schedule tick) | [`8000d9b`](https://github.com/ali-han-kaya/leibniz2/commit/8000d9b) |
 | 2026-11-02 | fix | (precommit) check-status-check-doc-sync hook anahtarlarını tamamla | [`8b2c0b0b`](https://github.com/ali-han-kaya/leibniz2/commit/8b2c0b0b) |
-| 2026-11-04 | test | (ci) 18'lik required sözleşmesine test beklentilerini hizala | [`7b380327`](https://github.com/ali-han-kaya/leibniz2/commit/7b380327) |
 | 2026-11-02 | fix | (ci) restore pre-commit validity, adopt cache v6 + setup-python v7 | [`91c7efb0`](https://github.com/ali-han-kaya/leibniz2/commit/91c7efb0) |
 | 2026-11-04 | test | (trend) gerçek defterde kayıt kimliği tekilliği kapısı | [`bba3cc00`](https://github.com/ali-han-kaya/leibniz2/commit/bba3cc00) |
 | 2026-11-04 | chore | (trend) yinelenen jsonl satırlarını tekilleştir | [`ae91a27d`](https://github.com/ali-han-kaya/leibniz2/commit/ae91a27d) |
-| 2026-10-27 | fix | (ci) Trivy yorum bacağı tolerate; tabela tek zorlayıcı | [`a72320ea`](https://github.com/ali-han-kaya/leibniz2/commit/a72320ea) |
-| 2026-10-27 | fix | (ci) docker-security kapısını required check sözleşmesine bağla | [`d6fd1c98`](https://github.com/ali-han-kaya/leibniz2/commit/d6fd1c98) |
-| 2026-11-04 | test | (docker) CVE-defteri çok-adlı ve floor'suz satırları ayrıştır | [`d28b44dd`](https://github.com/ali-han-kaya/leibniz2/commit/d28b44dd) |
 | 2026-10-27 | fix | (docker) pin libssl3/openssl/tzdata floors for trivy gate | [`dfb5651e`](https://github.com/ali-han-kaya/leibniz2/commit/dfb5651e) |
 | 2026-10-31 | fix | (ci) kosum ortasi producer artifact'i drift sayilmasin | [`596da15e`](https://github.com/ali-han-kaya/leibniz2/commit/596da15e) |
 | 2026-11-03 | fix | (webkit) sunucu baslatma butcesini olculen maliyete cikar | [`04283a97`](https://github.com/ali-han-kaya/leibniz2/commit/04283a97) |
@@ -719,16 +715,14 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-04 | fix | (trend) upsert kayıt kimliğine family'yi ekle | [`bf9ff90f`](https://github.com/ali-han-kaya/leibniz2/commit/bf9ff90f) |
 | 2026-10-02 | feat | (ci) haftalik trend kosumunda svg/json artifacti yayimla | [`e16566b3`](https://github.com/ali-han-kaya/leibniz2/commit/e16566b3) |
 | 2026-10-02 | feat | (trend) kayıt katmanına aynı-gün platform dedup (upsert) | [`8e50cece`](https://github.com/ali-han-kaya/leibniz2/commit/8e50cece) |
-| 2026-11-04 | docs | (ci) job tablosunu 18'lik required sözleşmesiyle ve R4 kanıtını hizala | [`55ae554c`](https://github.com/ali-han-kaya/leibniz2/commit/55ae554c) |
-| 2026-11-04 | docs | (map) job haritasını iki workflow'un ortak required sözleşmesine genişlet | [`75308975`](https://github.com/ali-han-kaya/leibniz2/commit/75308975) |
 | 2026-11-04 | docs | (deploy) 5c7ec4e9 kanit satirini ekle, gap 4'ten 0'a | [`d93226d`](https://github.com/ali-han-kaya/leibniz2/commit/d93226d) |
-| 2026-11-04 | docs | (changelog) (map) satırını senkronla | [`199de71e`](https://github.com/ali-han-kaya/leibniz2/commit/199de71e) |
 | 2026-11-04 | fix | (ci) CI'da koruma ve kota okumalarını dürüstçe atla | [`ea65787b`](https://github.com/ali-han-kaya/leibniz2/commit/ea65787b) |
 | 2026-11-04 | feat | (ci) PR birikimini önleyen hijyen botu (ölçüm + rebase + issue) | [`8452ea57`](https://github.com/ali-han-kaya/leibniz2/commit/8452ea57) |
 | 2026-11-04 | docs | (changelog) (map) satırını senkronla | [`d7e01457`](https://github.com/ali-han-kaya/leibniz2/commit/d7e01457) |
 | 2026-11-04 | docs | (map) job haritasını iki workflow sözleşmesine genişlet | [`f50ea8f6`](https://github.com/ali-han-kaya/leibniz2/commit/f50ea8f6) |
 | 2026-11-04 | docs | (ci) job tablosunu 18'lik required setine hizala | [`b6278a7e`](https://github.com/ali-han-kaya/leibniz2/commit/b6278a7e) |
 | 2026-11-04 | test | (ci) 18'lik required sözleşmesine test beklentilerini hizala | [`077fb310`](https://github.com/ali-han-kaya/leibniz2/commit/077fb310) |
+| 2026-11-04 | docs | (changelog) yeniden yazılan başlık hash'lerini senkronla | [`49483d26`](https://github.com/ali-han-kaya/leibniz2/commit/49483d26) |
 
 ### Regresyon notları
 
