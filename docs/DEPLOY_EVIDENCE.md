@@ -396,3 +396,14 @@ ilk ve tek kırmızı), `docker-security` #41343495088, `test-smoke`
 merge'ünden sonraki push, doğrulamayı yeni HEAD'de yeniden koşar.
 | 2026-11-01 | cf434244 | [failure #41343495226](https://github.com/ali-han-kaya/leibniz2/actions/runs/41343495226) | [success #41343495088](https://github.com/ali-han-kaya/leibniz2/actions/runs/41343495088) | [success #41343495173](https://github.com/ali-han-kaya/leibniz2/actions/runs/41343495173) | [success #40296221973](https://github.com/ali-han-kaya/leibniz2/actions/runs/40296221973) |
 | 2026-11-04 | 5c7ec4e9 | [success #41758969957](https://github.com/ali-han-kaya/leibniz2/actions/runs/41758969957) | [success #41758970356](https://github.com/ali-han-kaya/leibniz2/actions/runs/41758970356) | [success #41758969948](https://github.com/ali-han-kaya/leibniz2/actions/runs/41758969948) | [success #41435252478](https://github.com/ali-han-kaya/leibniz2/actions/runs/41435252478) |
+
+Bu satır iki kapının kilitlenmesini çözer: main 1693a968'te changelog'da
+squash artığı ölü satır vardı (heal PR #198 temizler) ve kanıt defteri 4
+anlamlı commit gerideydi (tolerans 3) — heal PR'ı kanıt kapısında, kanıt
+PR'ı ölü-hash kapısında kırmızıydı. Satır heal dalına eklendi; hücreler
+`event=push`, `headSha=1693a968`: `verify-delivery` #41788451125
+(**failure** — düzeltilen ölü satır; heal merge'inden sonraki döngü-
+kapatma dispatch'i yeşili üretir), `docker-security` #41788451085,
+`test-smoke` #41788451079 (success), determinism hücresi son main
+ölçümünü taşır (#41435252478, 2026-11-02 haftalık success).
+| 2026-11-04 | 1693a968 | [failure #41788451125](https://github.com/ali-han-kaya/leibniz2/actions/runs/41788451125) | [success #41788451085](https://github.com/ali-han-kaya/leibniz2/actions/runs/41788451085) | [success #41788451079](https://github.com/ali-han-kaya/leibniz2/actions/runs/41788451079) | [success #41435252478](https://github.com/ali-han-kaya/leibniz2/actions/runs/41435252478) |
