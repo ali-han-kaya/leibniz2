@@ -13,6 +13,7 @@ test_audit_refs_trend.py
 test_backfill_history_layers.py
 test_bootstrap_unit_coverage.py
 test_bootstrap_units_validate.py
+test_branch_cleanup_advisor.py
 test_budget_over_banner.py
 test_changelog_heal.py
 test_check_action_pins.py
