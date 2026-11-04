@@ -169,7 +169,15 @@ class TestVercelAdapterContract(unittest.TestCase):
             socket.getaddrinfo("api.github.com", 443)
         except OSError:
             self.skipTest("ağ yok — canlı-GH-API testi atlandı")
-        rows = _adapter().run_history_from_github(limit=3)
+        try:
+            rows = _adapter().run_history_from_github(limit=3)
+        except urllib.error.HTTPError as exc:
+            # Anonim GitHub kotası (60/sa) CI'nın paylaşılan egress IP'sinde
+            # tükenebilir; bu bir ağ/altyapı sınırıdır, şema regresyonu değil.
+            if exc.code in (403, 429):
+                self.skipTest("GitHub API kotası (HTTP %d) — canlı test atlandı"
+                              % exc.code)
+            raise
         self.assertTrue(rows, "Actions-API boş döndü")
         base = {"ts", "verdict", "p0", "p1", "budget_usd", "budget_limit",
                 "budget_method", "duration_s", "refs_verified", "refs_total",

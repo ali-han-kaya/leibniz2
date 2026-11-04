@@ -387,11 +387,16 @@ repos:
           yoksa kapı UNREADABLE sonucunu gizlemez; okuma yetkisi admin izni
           ister — ortamda PROTECTION_PAT (fine-grained, Administration: read)
           veya gh auth olmalı (GH_ADMIN_TOKEN yedek isimdir).
+          CI ortamında administration token'ı YOKTUR: hook orada dürüstçe
+          SKIP eder (canlı koruma denetimi `protection-drift` workflow'unda
+          fail-closed koşar); SKIP PASS değildir, gerekçesi loglanır.
         # venv-guard (686/705 satırlarıyla aynı desen): status_checks.py
         # PyYAML ister; sistem python3'ünde PyYAML yoksa modül importu
         # çöker ve kapı sahte-FAIL verir. Repo venv'i (fresh_clone_setup
         # adım 1: yaml içerir) varsa onunla koş.
-        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+        entry: bash -c 'if [ -n "${CI:-}" ] && [ -z "${PROTECTION_PAT:-}${GH_ADMIN_TOKEN:-}" ]; then
+          echo "SKIP: CI ortamında PROTECTION_PAT/GH_ADMIN_TOKEN yok — canlı koruma okuması protection-drift workflow unda (fail-closed)"; exit 0; fi;
+          PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
           PY=_calisma/.venv_z3/bin/python; exec "$PY" _calisma/CIKTI/status_checks.py --gh --json'
         language: system
         always_run: true
