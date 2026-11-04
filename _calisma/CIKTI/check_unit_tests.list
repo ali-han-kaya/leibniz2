@@ -124,6 +124,7 @@ test_pdf_source_freshness.py
 test_plist_check_workflow.py
 test_plist_keepalive_golden.py
 test_pptx_export.py
+test_pr_hygiene.py
 test_precheck_advisory_contract.py
 test_precommit_log.py
 test_preview_a11y_panel.py

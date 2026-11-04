@@ -247,3 +247,26 @@ gh auth refresh -h github.com -s workflow   # eksikse ekle (tarayıcı onayı is
 Ölçülmüş örnek: `plist-p1` job'ını (P1 plist drift kapısı) ekleyen dilim
 `verify.yml`'e dokunur; SSH ile push edildi, API tabanlı bir workflow yazımı
 aynı token'la reddedilirdi.
+
+## PR birikimi: `pr-hygiene` otomasyonu (2026-11-04 olayı)
+
+17 açık PR aynı anda BEHIND/DIRTY'ye düştü çünkü main ilerledikçe hiçbir
+aktör açık PR'ları güncellemiyordu. Tek seferlik çakışma çözümü (PR #192)
+kök nedeni kapatmaz; `.github/workflows/pr-hygiene.yml` her main push'unda
+(ve `workflow_dispatch` ile) board'u ölçer:
+
+| Adım | Davranış |
+|---|---|
+| Ölçüm | açık / BEHIND / DIRTY / BLOCKED / taslak / bayat (> 7 gün) |
+| Otomatik rebase | yalnız BEHIND + taslak-değil + `hold` etiketsiz, en fazla 5 PR |
+| İzleme issue'su | eşik (varsayılan 8 açık PR) aşılırsa açılır/güncellenir, board temizse kapatılır |
+| Fail-closed | `gh` çağrısı başarısız → rc 2 (kırmızı); eşik aşımı → rc 3 (kırmızı) |
+
+DIRTY PR'lar otomatik rebase EDİLMEZ — gerçek çakışma insan kararıdır; bot
+yalnız bayatlığı önler. Yerel karşılığı:
+
+```bash
+python3 _calisma/CIKTI/pr_hygiene.py --check          # ölç, ağa çıkmadan da:
+python3 _calisma/CIKTI/pr_hygiene.py --from-json prs.json --json-out board.json
+python3 _calisma/CIKTI/pr_hygiene.py --apply --issue  # rebase + issue senkronu
+```

@@ -296,6 +296,7 @@ HOOK_COVERAGE = {
         "test_r4_cron_evidence.py",
         "test_preview_server_drain_subprocess.py",
         "test_check_latex_surface.py",
+        "test_pr_hygiene.py",
     ],
 }
 
