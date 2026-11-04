@@ -21,8 +21,8 @@ aşamalar hem ilk kurulumun kaydı hem de günlük akışın parçasıdır.
 > | AŞAMA 3 — CI doğrulama | 🔄 **aktif** — her push'ta tekrarlanır (incremental) |
 > | AŞAMA 4 — koruma kanıtı | ⏸️ opsiyonel (1 (b) sonrası) |
 >
-> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **34 job**'u 4 kategoride
-> sunar: 18 **required** + 13 **advisory** + 3 **PR-only/manifest** job. Branch protection
+> Job tablosu (AŞAMA 3), `.github/workflows/verify.yml`'deki **35 job**'u 4 kategoride
+> sunar: 18 **required** + 14 **advisory** + 3 **PR-only/manifest** job. Branch protection
 > yalnızca required job'ları bloke eder.
 > Branch protection yalnızca required job'ları bloke eder.
 > Güncel listeyi üret: `python3 _calisma/CIKTI/status_checks.py --json`.
@@ -207,7 +207,7 @@ bash docs/publish_precheck.sh --allow-remote
 #    (geçici kapat → push → geri aç). Manuel push'ta önce kapatıp sonra geri açın.
 git push origin main
 
-# 3) CI'ı izle (34 job — 18 required + 13 advisory + 3 PR-only;
+# 3) CI'ı izle (35 job — 18 required + 14 advisory + 3 PR-only;
 #    aşağıdaki AŞAMA 3 job tablosu)
 RUN_ID=$(gh run list --limit 1 --json databaseId -q '.[0].databaseId')
 gh run watch $RUN_ID --exit-status
@@ -599,7 +599,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 --exit-status` + artifact listesi; sonuç `SONUÇ: PASS/FAIL` olarak loglanır
 (dry-run'da yalnızca önizlenir).
 
-**Job kategorileri (34 job = 18 required + 13 advisory + 3 PR-only):**
+**Job kategorileri (35 job = 18 required + 14 advisory + 3 PR-only):**
 
 > **Kural:** Branch protection **yalnızca A kategorisindeki** job'ları required check olarak
 > kabul eder. B (advisory) job'ları push'ta çalışır ama required değildir;
@@ -642,13 +642,14 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 | 26 | B | Fresh-clone HTTP smoke (advisory) | — temiz clone'dan preview_server.py başlatılır; `/api/health` + `/api/latest` curl ile doğrulanır |
 | 29 | B | Dashboard interaction E2E (node sandbox + Chromium CDP) | — `dashboard-smoke` (2026-10-08): tarayıcısız node/vm katmanı (hover tooltip, run-history filtreleri, lightbox odak yönetimi) + hermetic Playwright/CDP katmanı (kendi sunucusu + sentetik verisi); tarayıcısız katman her ortamda kırmızıya dönebilir |
 | 30 | B | WebKit smoke (advisory, Safari/safedriver) | — macOS runner'da safedriver/WebKit ile dashboard smoke; `webkit_smoke_report.txt` step-summary'ye + `webkit-smoke` artifact'a — advisory (main branch-protection contexts'ine de eklendi) |
+| 31 | B | Docx export (LibreOffice check, fail-closed) | — `docx-export` (2026-11-04, reword-working dalından land): markdown → gerçek `.docx` (`docx` npm, SOURCE_DATE_EPOCH pinli) + `libreoffice --headless --convert-to txt` tanık-metin kontrolü; `verdict=PASS` ve motor yolu zorunlu (yoksa FAIL), artifact `docx-report`; canlı protected sette YOK → `status_checks.GATE_EXCLUDE` |
 | | **C — PR-only (push'ta çalışmaz, PR'da çalışır)** | | |
 | 27 | C | Pre-commit P1 label gate (optional) | — skipped (push'ta çalışmaz) |
 | | **D — PR-only (yorum/etiket düşürme)** | | |
 | 27 | D | Manifest PR comment | — skipped (PR'da çalışır) |
 | 28 | D | Budget status PR comment | — bütçe + pre-commit PR yorumu; job-level PR-only, push'ta tamamen skipped (bütçe kapısı ayrı `budget` job'ında kalır) |
 
-**Artifact listesi (38):**
+**Artifact listesi (39):**
 - `unit-tests` (CIKTI birim test logu — `test_*.py` glob'u)
 - `verify-report` (tek log: K1-K14 + pre-commit bölümü + .sha256)
 - `action-runtimes` (her action'ın runs.using denetimi JSON — node24 kapısı)
@@ -678,6 +679,7 @@ gh run view $RUN_ID --json artifacts --jq '.artifacts[] | "\(.name) (\(.size_in_
 - `pattern-drift` (merge pattern ↔ ARTIFACT_JOBS tutarlılık denetimi — advisory, run summary'ye yazılır)
 - `preview-reload-smoke` (preview sunucu restart + endpoint smoke testi — advisory, macOS)
 - `webkit-smoke` (WebKit dashboard smoke raporu `webkit_smoke_report.txt` — advisory, macOS safedriver; step-summary'ye yazılır, artifact `if: always()`)
+- `docx-report` (üretilen .docx'ler + build/LibreOffice tanık-metin raporları — fail-closed docx-export job'ı; `if-no-files-found: error`)
 - `a11y-report-dark` + `a11y-report-light` (dashboard'ın koyu/açık tema a11y-gate raporları: axe sonuçları + config echo + verdict — fail-closed kapı; blocking/warn/allowlisted/incomplete özeti)
 - `a11y-guide-report-dark` + `a11y-guide-report-light` (Branch protection görsel kılavuzunun koyu/açık tema `/guide.html` a11y-gate raporları: witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
 - `a11y-landing-report-dark` + `a11y-landing-report-light` (Landing'in koyu/açık tema `/landing.html` a11y-gate raporları: generated witness + DOM tema doğrulamalı, aynı fail-closed özet sözleşmesi)
