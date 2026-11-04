@@ -723,6 +723,12 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-04 | docs | (map) job haritasını iki workflow'un ortak required sözleşmesine genişlet | [`75308975`](https://github.com/ali-han-kaya/leibniz2/commit/75308975) |
 | 2026-11-04 | docs | (deploy) 5c7ec4e9 kanit satirini ekle, gap 4'ten 0'a | [`d93226d`](https://github.com/ali-han-kaya/leibniz2/commit/d93226d) |
 | 2026-11-04 | docs | (changelog) (map) satırını senkronla | [`199de71e`](https://github.com/ali-han-kaya/leibniz2/commit/199de71e) |
+| 2026-11-04 | fix | (ci) CI'da koruma ve kota okumalarını dürüstçe atla | [`ea65787b`](https://github.com/ali-han-kaya/leibniz2/commit/ea65787b) |
+| 2026-11-04 | feat | (ci) PR birikimini önleyen hijyen botu (ölçüm + rebase + issue) | [`8452ea57`](https://github.com/ali-han-kaya/leibniz2/commit/8452ea57) |
+| 2026-11-04 | docs | (changelog) (map) satırını senkronla | [`d7e01457`](https://github.com/ali-han-kaya/leibniz2/commit/d7e01457) |
+| 2026-11-04 | docs | (map) job haritasını iki workflow sözleşmesine genişlet | [`f50ea8f6`](https://github.com/ali-han-kaya/leibniz2/commit/f50ea8f6) |
+| 2026-11-04 | docs | (ci) job tablosunu 18'lik required setine hizala | [`b6278a7e`](https://github.com/ali-han-kaya/leibniz2/commit/b6278a7e) |
+| 2026-11-04 | test | (ci) 18'lik required sözleşmesine test beklentilerini hizala | [`077fb310`](https://github.com/ali-han-kaya/leibniz2/commit/077fb310) |
 
 ### Regresyon notları
 
