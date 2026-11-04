@@ -399,11 +399,15 @@ class TestGatesMustRunInACleanCheckout(unittest.TestCase):
         method = mod.TestCheckContract(
             "test_check_passes_on_provisioned_checkout")
         hidden = tuple((name, path, (lambda _p: False))
-                       for name, path, _probe in mod.TestCheckContract.REQUIRED)
+                       for name, path, _probe
+                       in mod.TestCheckContract.REQUIRED)
+        self.assertTrue(hidden, "REQUIRED boş — skip kontratı ölçülemez")
         with mock.patch.object(mod.TestCheckContract, "REQUIRED", hidden):
             with self.assertRaises(unittest.SkipTest) as ctx:
                 method.test_check_passes_on_provisioned_checkout()
         self.assertIn("tam kurulum değil", str(ctx.exception))
+        # Skip mesajı EKSİK unit'i adıyla söylemeli (sessiz skip yasak).
+        self.assertIn(hidden[0][0], str(ctx.exception))
 
 
 class TestPreCommitHooksSurviveACleanCheckout(unittest.TestCase):

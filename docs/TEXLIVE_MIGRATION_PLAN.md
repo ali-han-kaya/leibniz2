@@ -165,8 +165,20 @@ farklarının kabul raporuyla belgelenmesi.
       _Açık: teslim PDF'i henüz TeXLive ile yeniden derlenmedi; defterdeki
       "TeXLive-era teslim" satırı hâlâ `—`. Yenileme teslim paketini
       değiştirdiği için ayrı iş._
-- [ ] Tam batarya (130 dosya) + coverage/drift/sync senkron kapıları
-      yeşile sabitlenir.
+- [x] Tam batarya (kayıt bugün **197 dosya** — plan yazılırken 130'du;
+      sayı manifestten gelir, `sync_check_unit_tests --check` rc=0) +
+      coverage/drift/sync senkron kapıları yeşile sabitlendi.
+      **Ölçüldü (2026-10-31, `main` @ `0a3f03c3`):** `check_unit_tests_hook.sh`
+      → **rc=0, 197/197 dosya PASS, 2988 test, 9 skip**; drift kapıları
+      (`summary_pattern_drift`, `check_config_sync`, `check_zip_lineage_drift`,
+      `check_plist_drift`, `check_protection_drift`) ve senkron kapıları
+      (`sync_check_unit_tests --check`, `check_status_check_doc_sync`,
+      `check_id_residual_doc_sync`, `check_skills_index`) rc=0. Kapı tablosu +
+      **sapma listesi**: `docs/TEXLIVE_FAZ4_GATES_REPORT.md`.
+      _Yeşile getirmek için üç sapma onarıldı: bayat `verification_chain.pptx`
+      (5 PNG yerine 1 medya) yeniden üretildi, bayat
+      `apps/dashboard-next/.next` tip çıktısı temizlendi, `test_ci_advisory_env`
+      içindeki etkisiz `os.path` yaması gerçek probe yamasına çevrildi._
 
 ## Faz 5 — Dokümantasyon
 
