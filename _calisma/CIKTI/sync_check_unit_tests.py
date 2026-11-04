@@ -145,6 +145,13 @@ EXCLUDE = {
     # Playwright integration smoke: Chromium ister, kendi preview_server.py'sini
     # kurar. Koşma yeri: CI `dashboard-smoke` job'u (EXCLUDE_CI_JOBS).
     "test_dashboard_playwright_smoke.py",
+
+    # Klavye-gezinme E2E'si: 26 testi Playwright/Chromium ister ve kendi
+    # preview_server.py'sini kurar (~105s) — pre-commit bütçesinin
+    # tamamından büyük. Koşma yeri: CI `dashboard-smoke` job'u
+    # (CI_JOB_COVERAGE kaydı aynı commit'te). Tarayıcısız guard sınıfları da
+    # bu dosyada olduğu için dosya bütün olarak job'a taşınır; Playwright
+    # yoksa o sınıflar SKIP eder, guard'lar koşar.
     "test_dashboard_keyboard_nav.py",
 }
 
