@@ -321,6 +321,13 @@ class HealWorkflowContractTests(unittest.TestCase):
         self.assertIn("success", run)                # zaten yeşilse dispatch yok
         # Erken dispatch (merge öncesi) yasak: ölü-hash ağacına koşum atılır.
         self.assertLess(run.index("MERGED"), run.index("gh workflow run"))
+        # Bekleme bütçesi required check süresini KAPSAMALI: verify ~7 dk +
+        # docker-security; 5 dk'lik ilk sürüm #198'de doldu ve PR BLOCKED
+        # kalırken adım boş döndü (ölçüldü 2026-11-04) → en az 15 dk.
+        iters = int(run.split("seq 1 ")[1].split(")")[0])
+        sleep_s = int(run.split("sleep ", 1)[1].split("\n")[0])
+        self.assertGreaterEqual(iters * sleep_s, 15 * 60)
+        self.assertGreaterEqual(self.doc["jobs"]["heal"]["timeout-minutes"], 20)
 
     def test_full_history_fetch_required_for_reachability(self):
         steps = self.doc["jobs"]["heal"]["steps"]
