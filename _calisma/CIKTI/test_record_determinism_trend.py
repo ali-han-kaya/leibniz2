@@ -574,6 +574,8 @@ class TestRealTrendDataUniqueKeys(unittest.TestCase):
             "yinelenen (date, platform, family) anahtarı: %s — her anahtar "
             "tek satır olmalı; --update upsert ile yazar"
             % ", ".join("satır %s/%s %r" % (a, b, k) for a, b, k in dupes))
+
+
 class TestUpsertDedup(unittest.TestCase):
     """Aynı-gün + aynı-platform upsert/dedup: satır çoğalmaz, kopyalar iner."""
 
