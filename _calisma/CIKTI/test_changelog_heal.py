@@ -282,8 +282,14 @@ class HealWorkflowContractTests(unittest.TestCase):
         text = self.text
         self.assertIn("/actions/runs/$id/approve", text)
         self.assertIn("action_required", text)
-        # Dispatch yanlış çözümdü: PR'a bağlanmaz, boşa koşum üretir.
-        self.assertNotIn("gh workflow run", text)
+        # Dispatch ONAY YERİNE kullanılamaz: PR'a bağlanmaz, check
+        # raporlanmaz. Tek meşru kullanım merge SONRASI temiz main'de
+        # verify'ı tazelemektir (aşağıdaki döngü-kapatma testi); onay
+        # bloğundan önce dispatch yasak.
+        approve_idx = text.index("/actions/runs/$id/approve")
+        if "gh workflow run" in text:
+            self.assertGreater(text.index("gh workflow run"), approve_idx,
+                               "onaydan önce dispatch: PR check'siz kalır")
         # Onay, PR açıldıktan SONRA.
         self.assertGreater(text.index("/actions/runs/$id/approve"),
                            text.index("gh pr create"))
@@ -294,6 +300,27 @@ class HealWorkflowContractTests(unittest.TestCase):
         # ve yeni PR check'siz kalır (ölçüldü: #141).
         self.assertIn("SHA=$(git rev-parse HEAD)", text)
         self.assertIn("head_sha==" , text)
+
+    def test_reverify_step_closes_red_loop_after_heal_merge(self):
+        """Heal merge'i GITHUB_TOKEN ile iner → yeni koşum tetiklemez.
+
+        Squash-merge dal commit'ini düşürdüğü için o push'un verify koşumu
+        ölü hash görür (ölçüldü: 9d6589e0 kırmızı); heal temiz ağacı indirir
+        ama koşum üretmez (156cc808 temiz/koşumsuz). Sonuç: main sürekli
+        "son koşum kırmızı" flaplayır. Döngü-kapatma adımı heal merge'ini
+        bekler, temiz main başında verify zaten yeşil değilse dispatch eder.
+        """
+        steps = self.doc["jobs"]["heal"]["steps"]
+        names = [s.get("name") for s in steps]
+        idx = names.index("Re-verify clean main (close the red loop)")
+        self.assertGreater(idx, names.index("Commit to bot branch and open PR"))
+        run = steps[idx]["run"]
+        self.assertIn("gh workflow run verify.yml --ref main", run)
+        self.assertIn("--json state", run)          # merge beklemesi
+        self.assertIn("MERGED", run)                 # merge doğrulaması
+        self.assertIn("success", run)                # zaten yeşilse dispatch yok
+        # Erken dispatch (merge öncesi) yasak: ölü-hash ağacına koşum atılır.
+        self.assertLess(run.index("MERGED"), run.index("gh workflow run"))
 
     def test_full_history_fetch_required_for_reachability(self):
         steps = self.doc["jobs"]["heal"]["steps"]
