@@ -325,5 +325,40 @@ class TestVerboseExecutedCounting(unittest.TestCase):
         self.assertEqual(r.status, "allowed", r.detail)
 
 
+class TestHookGitEnvStripping(unittest.TestCase):
+    """`git commit` hook'lara GIT_DIR/GIT_INDEX_FILE aktarır — batarya sökmeli.
+
+    Ölçülen olay (2026-11-02): GIT_* varken test_changelog_heal tek başına
+    9 failure + gerçek indekse ~780 dosyalık sahte staged-silme üretti;
+    batarya içinde prettier/vercel/zero_check kapıları ls-files'tan düştü ve
+    commit hiç açılmadı. GIT_*'siz (standalone) aynı koşum yeşil.
+    Sözleşme: sarmalayıcı, sync --check'ten ÖNCE bu değişkenleri söker.
+    """
+
+    HOOK = HERE / "check_unit_tests_hook.sh"
+    VARS = ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR")
+
+    def test_hook_unsets_git_env_before_any_subprocess(self):
+        src = self.HOOK.read_text(encoding="utf-8")
+        unset_lines = [ln for ln in src.splitlines()
+                       if ln.startswith("unset ")]
+        self.assertTrue(unset_lines, "hook'ta unset satırı yok")
+        joined = " ".join(unset_lines)
+        for var in self.VARS:
+            self.assertIn(var, joined, var + " unset edilmiyor")
+        # set -euo'dan SONRA, ilk alt süreçten (sync --check) ÖNCE olmalı.
+        pos = src.index("\nunset GIT_DIR")
+        self.assertGreater(pos, src.index("set -euo pipefail"))
+        self.assertLess(pos, src.index('"$SCRIPT_DIR/sync_check_unit_tests.py"'))
+
+    def test_unset_line_survives_as_single_contract_line(self):
+        # Dördü tek satırda: biri silinirse test kırılır (pazara karşı koruma).
+        src = self.HOOK.read_text(encoding="utf-8")
+        line = next(ln for ln in src.splitlines()
+                    if ln.startswith("unset GIT_DIR"))
+        for var in self.VARS:
+            self.assertIn(var, line.split())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

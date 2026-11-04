@@ -43,6 +43,16 @@
 # =============================================================================
 set -euo pipefail
 
+# `git commit`, hook'lara GIT_DIR/GIT_INDEX_FILE/GIT_WORK_TREE/GIT_COMMON_DIR
+# aktarır. Batarya testlerinin geçici git sandbox'ları (test_changelog_heal,
+# test_check_zero_check_fail_open) bu değişkenlerle GERÇEK indekse yazar:
+# ölçülen olay (2026-11-02) — tek test koşumu 9 failure + ~780 dosyalık sahte
+# staged-silme + sahte fixture'lar (test_probe.py, sahte liste, stub senkron
+# betiği); sonraki kapılar ls-files'tan düşer ve commit hiç açılmadı.
+# GIT_*'siz (standalone) aynı batarya yeşil — commit bağlamını standalone'a
+# eşitler; testler git'i kendi cwd'lerinden, normal şekilde çözer.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MANIFEST="$SCRIPT_DIR/check_unit_tests.list"
