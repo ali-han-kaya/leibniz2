@@ -727,6 +727,20 @@ jobs:
             --json --out python3_shell_findings.json
           echo "python3-shell denetimi tamam — python3_shell_findings.json"
 
+      # ─── LATEX YÜZEY KAPISI (fail-closed) ─────────────────────────────
+      # check_latex_surface.py — tracked .tex yüzeyinde aktif $$, aynı
+      # \input/\include grafında label'sız cross-reference, çözülemeyen
+      # \input hedefi ve aynı grafta yinelenen \label bulgusu JSON
+      # sidecar'a yazılır; bulgu varsa adım KIRMIZI (fail-closed — kapı rolü
+      # hem pre-commit hook'unda hem burada). logs/ artifact'ına girer.
+      - name: Check LaTeX surface (fail-closed)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p logs
+          python3 _calisma/CIKTI/check_latex_surface.py \
+            --root . --json --out logs/latex_surface_findings.json
+
       # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
       # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
       # hash'leri) ve hangi araç sürümleri kullanıldı. PRECOMMIT_CACHE.md

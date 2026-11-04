@@ -138,6 +138,7 @@ verify-delivery                # K1-K7 core (stdlib-only, fast)
 check-action-pins              # action major version pinning (no downgrade)
 check-python3-shell            # block shell cmds under shell: python3 {0}
 check-absolute-paths           # block /Users/…, /home/… absolute paths
+check-latex-surface            # tracked .tex: $$ ban + label/\input integrity
 actionlint                     # workflow YAML lint (fail-closed)
 verify-delivery-symbolic       # K8 Z3
 verify-delivery-lean           # K9 Lean
