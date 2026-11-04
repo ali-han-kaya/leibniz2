@@ -7,21 +7,20 @@ fiilen haftalık ateşlenmesi canlanır" diyordu. Ölçüm (2026-10-02):
   * PR #52 merge: 2026-09-30T22:19:48Z -> `8314fde4a4`
   * `docker-security.yml` main'de `schedule: cron "43 3 * * 1"` içeriyor,
     GitHub API `state=active` -> cron TETIKLENEBILIR
-  * ama `event=schedule` tetikli koşum sayısı 0; ilk ateşleme
-    2026-10-05T03:43Z (Pzt) -> henüz GERCEKLESMEDI
-  * kontrol: `determinism-trend` aynı repoda schedule ile 2 kez ateşlendi
-    (2026-09-21 failure, 2026-09-28 success) -> mekanizma saglam
+  * ilk ateşleme 2026-10-05T03:43Z (Pzt); 2026-10-31'de `--limit 100`
+    penceresi hâlâ 0 gösteriyordu (tarihsel kayıt)
+  * 2026-11-01 `--event schedule` yenilemesi: 4 koşum — 2026-10-05
+    failure, 2026-10-12 success, 2026-10-19 success, 2026-10-26 failure
 
-Bu test, "tetiklenebilir" (ölçülebilir, şimdi doğru) ile "ateşlendi"
-(ölçülemez, henüz olmadı) ayrımını prose'a bırakmaz:
+Bu test, "tetiklenebilir" ile "ateşlendi" ayrımını prose'a bırakmaz:
 
   1) cron ifadesi workflow'ta birebir durur ve 5 alanlıdır — haftanın gün
      alanı yanlış yazılırsa cron HIC ateşlenmez ve push koşumları yeşil
      görünürken haftalık tarama hiç olmaz; bu sessiz sönüklüğü kapatır.
   2) `next_fire()` gerçekten Pzt 03:43 UTC verir — hafta sonu sınırında da.
-  3) denetim kaydı "ateşlendi" gibi okunamaz: ilk ateşlemeyi BEKLENMEKTE
-     olarak adlandırır ve kanıt olarak schedule koşum sayısını (0) yazar.
-     Kayıtta olmuş gibi görünen bir şey, olmuş gibi okunamaz.
+  3) tarihsel "henüz ateşlenmedi / schedule 0" ölçümü kayıtta KORUNUR;
+     güncel 4 schedule koşumu ve ilk koşum id'si de kayıtta adlandırılır.
+     Böylece eski ölçüm silinmez, yeni ölçüm de görünür olur.
   4) kayıt, ilk ateşlemeyi PR #52 merge'inden sonraki ilk Pazartesi olarak
      adlandırır — merge tarihi kayarsa kayıt kırılır.
 
@@ -112,15 +111,23 @@ class TestAuditRecord(unittest.TestCase):
     def test_row_names_the_cron_expression(self):
         self.assertIn("43 3 * * 1", self.row)
 
-    def test_row_does_not_claim_the_cron_already_fired(self):
-        # Kanıtlanmamış kapanış: kayıt "ateşlendi/canlandı" derse ve schedule
-        # koşum sayısını 0 yazmazsa, denetim okuyan biri olmuş sanır.
+    def test_row_preserves_the_historical_zero_measurement(self):
+        # Tarihli kayıt silinmez: 2026-10-31'de `--limit 100` penceresi 0
+        # gösteriyordu; bu, güncel 4 koşumun kanıtını gizlememeli.
         self.assertIn("henüz ateşlenmedi", self.row)
         self.assertIn("schedule", self.row)
 
-    def test_row_records_zero_schedule_runs_and_a_pending_first_fire(self):
+    def test_row_preserves_historical_zero_and_pending_first_fire(self):
         self.assertIn("tetikli koşum sayısı **0**", self.row)
         self.assertIn("2026-10-05T03:43Z", self.row)
+
+    def test_row_records_the_four_observed_schedule_runs(self):
+        self.assertIn("2026-11-01 `--event schedule` yenilemesi: 4 koşum", self.row)
+        for run_id in ("37299256892", "38242006582", "39229134880",
+                       "40299014424"):
+            self.assertIn(run_id, self.row)
+        self.assertIn("libssl3", self.row)
+        self.assertIn("CVE-2026-84782", self.row)
 
     def test_row_names_the_merge_that_armed_it(self):
         self.assertIn("2026-09-30T22:19:48Z", self.row)

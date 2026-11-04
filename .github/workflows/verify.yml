@@ -79,13 +79,13 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       # ─── PIP CACHE — pip install süresini düşür ──────────────────────
       - name: Cache pip packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip|${{ runner.os }}|${{ hashFiles('.github/workflows/verify.yml') }}
@@ -289,9 +289,9 @@ jobs:
       # her run'da z3-solver ortamının yeniden kurulmasını önler → run süresi
       # düşer. Key .pre-commit-config.yaml hash'ine bağlı: config (dolayısıyla
       # additional_dependencies) değişirse cache otomatik geçersizleşir.
-      # actions/cache@v5 = Node 24 (repo'daki diğer action'larla tutarlı).
+      # actions/cache@v6 = Node 24 (repo'daki diğer action'larla tutarlı).
       - name: Cache pre-commit hook environments
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -727,6 +727,20 @@ jobs:
             --json --out python3_shell_findings.json
           echo "python3-shell denetimi tamam — python3_shell_findings.json"
 
+      # ─── LATEX YÜZEY KAPISI (fail-closed) ─────────────────────────────
+      # check_latex_surface.py — tracked .tex yüzeyinde aktif $$, aynı
+      # \input/\include grafında label'sız cross-reference, çözülemeyen
+      # \input hedefi ve aynı grafta yinelenen \label bulgusu JSON
+      # sidecar'a yazılır; bulgu varsa adım KIRMIZI (fail-closed — kapı rolü
+      # hem pre-commit hook'unda hem burada). logs/ artifact'ına girer.
+      - name: Check LaTeX surface (fail-closed)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p logs
+          python3 _calisma/CIKTI/check_latex_surface.py \
+            --root . --json --out logs/latex_surface_findings.json
+
       # ÖZET: pre-commit cache durumu + hook env sürümleri. Tekrarlanabilirlik
       # denetimi için: hangi pre-commit sürümü, hangi hook ortamları (env
       # hash'leri) ve hangi araç sürümleri kullanıldı. PRECOMMIT_CACHE.md
@@ -1020,7 +1034,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1401,7 +1415,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1612,7 +1626,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1693,7 +1707,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -1903,7 +1917,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2007,7 +2021,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2089,7 +2103,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2147,7 +2161,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2520,7 +2534,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2661,7 +2675,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2721,7 +2735,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2867,7 +2881,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -2934,12 +2948,12 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────
   # WEBKIT-SMOKE (advisory) — Safari/WebKit-parite dashboard smoke.
   #
-  # safedriver tabanlı WebKit koşumu (Chromium-only QA'nın parite kanıtı):
+  # safaridriver tabanlı WebKit koşumu (Chromium-only QA'nın parite kanıtı):
   # Safari'de açılış + ana panel render (#status-board/#m-verdict/#badges,
   # 2 tab, 13 galeri öğesi, 2 tabpanel, run-history) + sayfa-içi hata
-  # toplayıcıyla console-hata-yok. macOS runner'da Safari + safedriver
-  # mevcut; Remote Automation CI'da `sudo safedriver --enable` ile açılır.
-  # Statik katman her ortamda koşar — live katman safedriver yoksa SKIP
+  # toplayıcıyla console-hata-yok. macOS runner'da Safari + safaridriver
+  # mevcut; Remote Automation CI'da `sudo safaridriver --enable` ile açılır.
+  # Statik katman her ortamda koşar — live katman safaridriver yoksa SKIP
   # (fail-closed değil; advisory: parite kanıtı macOS'te toplanır).
   # ──────────────────────────────────────────────────────────────────────
   webkit-smoke:
@@ -2955,13 +2969,13 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - name: Enable Safari remote automation
         run: |
-          sudo safedriver --enable 2>&1 | head -5 || true
+          sudo safaridriver --enable 2>&1 | head -5 || true
 
       - name: Run WebKit dashboard smoke
         id: smoke
@@ -3025,7 +3039,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -3042,7 +3056,7 @@ jobs:
         run: pip install playwright==1.63.0
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-1.63.0
@@ -3133,13 +3147,13 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       # ─── PIP CACHE — pip install süresini düşür ──────────────────────
       - name: Cache pip packages
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip|${{ runner.os }}|${{ hashFiles('.github/workflows/verify.yml') }}
@@ -3148,7 +3162,7 @@ jobs:
 
       # ─── PRE-COMMIT CACHE — ~/.cache/pre-commit (z3-solver vb.) ─────
       - name: Cache pre-commit hook environments
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ runner.os }}|${{ hashFiles('.pre-commit-config.yaml') }}
@@ -3913,7 +3927,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -3980,7 +3994,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 

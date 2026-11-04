@@ -12,12 +12,16 @@ record_determinism_trend.py sözleşmelerini OFFLINE sabitler:
      ölçüm FAIL; aynı kaynakta hash sapması FAIL (uzlaşma ihlali); kaynak
      değişince serbest; platform kapsamı (cutoff sonrası darwin+linux)
      eksikse FAIL; iki platform aynı kaynak+hash'i paylaşırsa OK.
-  4) jsonl yalnız eklenir; bozuk satırda ValueError.
+  4) jsonl upsert: aynı (date, platform) satırı DEĞİŞİR, tarihsel kopyalar tek
+     satıra iner, yeni anahtar eklenir; bozuk satırda ValueError.
   5) AİLELER (2026-10-08): canvas satırı ayrı seridir. Değişmezler aile
      BAŞINA uygulanır — taze canvas satırı bayat manuscript serisini yeşile
      boyayamaz (fail-open regresyon testi); her iki aile de trendde bulunmalı;
      şema-dışı `family` değeri kırmızıdır. Canvas modu yalnız apex (kitap)
      kaynağını kabul eder ve aile SDE sabitini (1700000000) zorlar.
+  6) GERÇEK DEFTER TEKİLLİĞİ: kayıt kimliği (date, platform, family);
+     aynı anahtarın ikinci satırı kopyadır — gerçek dosyada
+     fail-closed kapı (dosya yok/boş/bozuk = FAIL, SKIP değil).
 
 Tarihler cutoff'tan (2026-09-17) SONRA seçilir ki yalnız hedeflenen
 değişmez ihlal edilsin (izole senaryolar). stdlib-only, OFFLINE.
@@ -177,7 +181,7 @@ class TestUpdateMode(unittest.TestCase):
                 rc = rdt.main(["--update"])
                 self.assertEqual(rc, 0)
                 lines = rdt._records(fake_trend)
-                self.assertEqual(len(lines), 1)  # append-only + tek ölçüm
+                self.assertEqual(len(lines), 1)  # upsert: aynı gün+platform tek satır
                 self.assertEqual(lines[0]["gate"], "PASS")
                 self.assertIn("platform", lines[0])
             finally:
@@ -510,6 +514,153 @@ class TestCanvasContractAcrossArtifacts(unittest.TestCase):
         self.assertTrue(os.path.exists(rdt.CANVAS_APEX_TEX))
         self.assertEqual(os.path.basename(rdt.CANVAS_APEX_TEX),
                          rdt.CANVAS_APEX_STEM + ".tex")
+
+
+class TestRealTrendDataUniqueKeys(unittest.TestCase):
+    """Gerçek trend defterinde kayıt kimliği tekilliği — fail-closed kapı.
+
+    Kayıt kimliği `(date, platform, family)`'dir; `family` yoksa manuscript
+    (şema genişlemesinin geriye dönük okuması). Aynı anahtarın ikinci satırı
+    kopyadır. Kapı GERÇEK dosyayı okur: dosya yoksa, boşsa ya da JSONL
+    bozuksa SKIP değil FAIL — sessizce açık kalan kapı kopyaları sonraki
+    haftaya taşır.
+    """
+
+    @staticmethod
+    def _duplicates(rows):
+        """[(ilk_satır, kopya_satır, anahtar)] — dosya sırasıyla."""
+        seen, dupes = {}, []
+        for lineno, rec in enumerate(rows, 1):
+            key = (str(rec.get("date")), str(rec.get("platform")),
+                   rdt.family_of(rec))
+            if key in seen:
+                dupes.append((seen[key], lineno, key))
+            else:
+                seen[key] = lineno
+        return dupes
+
+    def test_detection_flags_duplicate_key(self):
+        rows = [_rec(date="2026-09-23", platform="linux"),
+                _rec(date="2026-09-23", platform="linux")]
+        self.assertEqual(
+            self._duplicates(rows),
+            [(1, 2, ("2026-09-23", "linux", "manuscript"))])
+
+    def test_detection_treats_missing_family_as_manuscript(self):
+        legacy = _rec(date="2026-09-23", platform="linux")
+        explicit = _rec(date="2026-09-23", platform="linux",
+                        family="manuscript")
+        self.assertEqual(len(self._duplicates([legacy, explicit])), 1)
+
+    def test_detection_allows_same_day_per_family(self):
+        rows = [_rec(date="2026-10-12", platform="linux"),
+                _crec(date="2026-10-12", platform="linux")]
+        self.assertEqual(self._duplicates(rows), [])
+
+    def test_real_trend_file_has_no_duplicate_record_keys(self):
+        path = rdt.TREND
+        # `_records` var olmayan dosyada [] döner; kapı bunu PASS sayamaz.
+        self.assertTrue(os.path.isfile(path),
+                        "gerçek trend defteri yok (fail-closed): %s" % path)
+        try:
+            rows = rdt._records(path)
+        except (OSError, ValueError) as exc:
+            self.fail("gerçek trend defteri okunamadı (fail-closed): %s" % exc)
+        self.assertTrue(rows,
+                        "gerçek trend defteri boş (fail-closed): %s" % path)
+        dupes = self._duplicates(rows)
+        self.assertEqual(
+            dupes, [],
+            "yinelenen (date, platform, family) anahtarı: %s — her anahtar "
+            "tek satır olmalı; --update upsert ile yazar"
+            % ", ".join("satır %s/%s %r" % (a, b, k) for a, b, k in dupes))
+class TestUpsertDedup(unittest.TestCase):
+    """Aynı-gün + aynı-platform upsert/dedup: satır çoğalmaz, kopyalar iner."""
+
+    def test_upsert_adds_new_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-18", platform="darwin")])
+            action = rdt._upsert(p, _rec(date="2026-09-19", platform="linux"))
+            self.assertEqual(action, "added")
+            self.assertEqual(len(rdt._records(p)), 2)
+
+    def test_upsert_distinguishes_platform(self):
+        # Aynı gün, farklı platform → AYRI satır (kimlik (date, platform,
+        # family)).
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-18", platform="darwin")])
+            action = rdt._upsert(p, _rec(date="2026-09-18", platform="linux"))
+            self.assertEqual(action, "added")
+            self.assertEqual(len(rdt._records(p)), 2)
+
+    def test_upsert_replaces_same_day_platform(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-18", platform="darwin"),
+                           _rec(date="2026-09-19", platform="linux")])
+            action = rdt._upsert(
+                p, _rec(date="2026-09-18", platform="darwin",
+                        tectonic_canonical_sha256="e" * 64))
+            self.assertEqual(action, "updated")
+            recs = rdt._records(p)
+            self.assertEqual(len(recs), 2)  # satır sayısı değişmez
+            self.assertEqual(recs[0]["tectonic_canonical_sha256"], "e" * 64)
+            self.assertEqual([r["date"] for r in recs],
+                             ["2026-09-18", "2026-09-19"])  # sıra korunur
+
+    def test_upsert_collapses_historical_duplicates(self):
+        # Aynı gün+platform iki satır → tek satır (tarihsel kopyalar iner).
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(date="2026-09-20", platform="linux"),
+                           _rec(date="2026-09-20", platform="linux"),
+                           _rec(date="2026-09-21", platform="linux")])
+            action = rdt._upsert(
+                p, _rec(date="2026-09-20", platform="linux",
+                        tectonic_canonical_sha256="f" * 64))
+            self.assertEqual(action, "updated")
+            recs = rdt._records(p)
+            self.assertEqual(len(recs), 2)
+            self.assertEqual([r["date"] for r in recs],
+                             ["2026-09-20", "2026-09-21"])
+            self.assertEqual(recs[0]["tectonic_canonical_sha256"], "f" * 64)
+
+    def test_upsert_is_idempotent(self):
+        # Aynı anahtarla iki kez upsert → yine tek satır (çoğalma yok).
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rec = _rec(date="2026-09-22", platform="darwin")
+            rdt._upsert(p, rec)
+            rdt._upsert(p, rec)
+            self.assertEqual(len(rdt._records(p)), 1)
+
+    def test_upsert_keeps_other_family_same_day(self):
+        # Aynı gün + platform, farklı aile → AYRI seriler; biri diğerini ezmez.
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            ms = _rec(date="2026-09-18", platform="linux")
+            canvas = _crec(date="2026-09-18", platform="linux")
+            rdt._write(p, [ms, canvas])
+            action = rdt._upsert(
+                p, _rec(date="2026-09-18", platform="linux",
+                        tectonic_canonical_sha256="e" * 64))
+            self.assertEqual(action, "updated")
+            recs = rdt._records(p)
+            self.assertEqual(len(recs), 2)
+            self.assertEqual({rdt.family_of(r) for r in recs},
+                             {"manuscript", "canvas"})
+            self.assertEqual(recs[0]["tectonic_canonical_sha256"], "e" * 64)
+            canvas_row = next(r for r in recs if rdt.family_of(r) == "canvas")
+            self.assertEqual(canvas_row["tectonic_canonical_sha256"],
+                             canvas["tectonic_canonical_sha256"])
+
+    def test_write_roundtrip(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            rdt._write(p, [_rec(), _rec(platform="linux")])
+            self.assertEqual(len(rdt._records(p)), 2)
 
 
 if __name__ == "__main__":

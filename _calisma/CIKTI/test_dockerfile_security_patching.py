@@ -129,12 +129,25 @@ def dockerfile_ledger_cves(dockerfile: str, packages) -> dict:
                 break
             continue
         header = re.match(r"#\s+([A-Za-z0-9][A-Za-z0-9.+_-]*):\s*(.*)$", s)
+        names = [header.group(1)] if header else []
+        if not header:
+            # Aynı kaynak paket iki adla taranabiliyor: "libssl3 + openssl".
+            # Başlık adları `+`/`/` ile ayrılır; CVE'ler adların HEPSİNE yazılır.
+            multi = re.match(
+                r"#\s+([A-Za-z0-9][A-Za-z0-9.+_ -]*(?:\s*[+/]\s*"
+                r"[A-Za-z0-9][A-Za-z0-9.+_-]*)+):\s*(.*)$", s)
+            if multi:
+                names = [n.strip() for n in re.split(r"\s*[+/]\s*",
+                                                     multi.group(1))]
+                header = multi
         if header:
-            current = header.group(1) if header.group(1) in out else None
-            if current:
-                out[current] |= set(_CVE_RE.findall(header.group(2)))
+            matched = [n for n in names if n in out]
+            current = matched or None
+            for n in matched:
+                out[n] |= set(_CVE_RE.findall(header.group(2)))
         elif current:
-            out[current] |= set(_CVE_RE.findall(s))
+            for n in current:
+                out[n] |= set(_CVE_RE.findall(s))
     return out
 
 
@@ -152,10 +165,20 @@ def doc_ledger(doc: str) -> dict:
         if len(cells) < 3 or cells[0] == "Paket" or set(cells[0]) <= set("-: "):
             continue
         floor_cell = cells[2].split()
-        rows[cells[0].strip("`")] = {
-            "floor": floor_cell[0] if floor_cell else "",
-            "cves": set(_CVE_RE.findall(cells[1])),
-        }
+        floor = floor_cell[0] if floor_cell else ""
+        if floor.startswith("**"):
+            # "**eklenmedi (kasıtlı)**" — bilinçli floor'suz kayıt (pip).
+            # ARG defterinin parçası değildir; paket kümesi karşılaştırmasına
+            # girmez (gerekçe aynı satırın kanıt hücresinde yazılı).
+            continue
+        # Aynı kaynak paket iki adla taranıyor: "libssl3 / openssl".
+        names = [n.strip().strip("`")
+                 for n in re.split(r"\s*[/+]\s*", cells[0]) if n.strip()]
+        for name in names:
+            rows[name] = {
+                "floor": floor,
+                "cves": set(_CVE_RE.findall(cells[1])),
+            }
     return rows
 
 
@@ -257,6 +280,14 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
         self.assertIn("libpcre2-8-0=10.42-1+deb12u2", self._df)
         self.assertIn("CVE-2026-86145", self._df)
         self.assertIn("CVE-2026-89161", self._df)
+        # 2026-10-27 turu: PR #54 gate bulguları — aynı kaynak paket iki
+        # adla taranıyor (libssl3 + openssl), tzdata DLA'sı ise UNKNOWN
+        # seviye (fail-closed kapı onu da bloklar) — floor'lar kalıcı kayıt.
+        self.assertIn("libssl3=3.0.22-1~deb12u2", self._df)
+        self.assertIn("openssl=3.0.22-1~deb12u2", self._df)
+        self.assertIn("tzdata=2026e-0+deb12u1", self._df)
+        self.assertIn("DLA-4792-1", self._df)
+        self.assertIn("CVE-2026-63072", self._df)
 
     def test_targeted_only_upgrade_not_full_upgrade(self):
         # Yalnız etkilenen paket; genel upgrade/dist-upgrade yasak.
@@ -312,8 +343,14 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
         # satırı dpkg-query karşılığı: pip show + floor ekranı kırpma.
         arg_line = next(ln for ln in self._df.splitlines()
                         if ln.startswith('ARG PYTHON_SECURITY_PATCH_PACKAGES='))
+        # 2026-10-27 kararı (PR #54): pip floor'u BİLEREK eklenmez — pip'in
+        # son sürümü (26.2.2) vendor SBOM'unda kapı setinde 4 HIGH taşıyor
+        # (trivy 0.69.3 ile rc=1 ölçüldü); pip 24.0'ın kendi CVE'leri ise
+        # MEDIUM/LOW → kapı setine girmez. Gerekçe: docs/DOCKER_SECURITY_PATCHING.md.
         for floor in ("setuptools>=80", "wheel>=0.46.2"):
             self.assertIn(floor, arg_line, f"CVE-defteri floor'u ARG'de: {floor}")
+        self.assertNotIn("pip>=", arg_line,
+                         "pip floor'u kasıtlı olarak eklenmemeli (vendor SBOM kapıyı kırar)")
         self.assertIn("pip show", self._df,
                       "pip katmanı kanıtı pip show ile (apt dpkg-query simetrisi)")
         self.assertIn("sed 's/[><=!~].*//'", self._df,
@@ -342,7 +379,8 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
                       "CVE-defteri",
                       "libpcre2-8-0",
                       "CVE-2026-86145",
-                      "10.42-1+deb12u1",
+                      "10.42-1+deb12u2",
+                      "libssl3", "tzdata", "kasıtlı",
                       "docker_security_smoke.sh",
                       "Katkı sözleşmesi"):
             self.assertIn(token, self._doc,

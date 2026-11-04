@@ -11,6 +11,14 @@ tetiklemesi oldu mu?") ölçüm disiplinine değil, birinin hatırlamasına bağ
 `schedule` tetikleyicisi hiç ateşlenmezse kırmızı bir koşum da doğmaz: yalnız
 sessizlik olur ve satır "bekliyor" hâlinde sonsuza kadar bayatlar.
 
+Pencere tuzağı (2026-11-01'de ölçüldü, düzeltildi): ilk sürüm koşumları
+`gh run list --limit 100` ile okuyordu. Bu repodaki push/PR hacmi (9 günde
+~500 koşum) haftalık `schedule` koşumlarını pencerenin dışına itti; bekçi
+"schedule 0" görüp yanlışlıkla `missed` hükmü yazdı. Gerçekte dört `schedule`
+koşumu vardı (2026-10-05 failure, 10-12 success, 10-19 success, 10-26 failure).
+Ölçüm artık sunucu-tarafı `--event schedule` filtresiyle yapılır: sabit olan
+şey pencere değil, tetikleyici türüdür — koşum hacmi kanıtı gizleyemez.
+
 Bu betik o sessizliği ölçülebilir hâle getirir. Tek giriş noktasıdır
 (workflow mantığı YAML'da yeniden yazılmaz):
 
@@ -237,11 +245,11 @@ def render_segment(v: Verdict) -> str:
                 % (tick, v.deadline_hours))
     elif v.state == "missed":
         body = ("beklenen ilk `schedule` tick'i (`%s`) ve +%dh sert bitişi "
-                "**GEÇTİ**, `event=schedule` koşum sayısı hâlâ **0** (son %d "
-                "koşumun tamamı push / pull_request / workflow_dispatch) → "
-                "GitHub'ın kendi tetiklemesi kanıtlanmadı; R4 bu yüzden açık "
-                "ve nöbet bu durumu KIRMIZI raporlar."
-                % (tick, v.deadline_hours, v.total_runs))
+                "**GEÇTİ**, `event=schedule` koşum sayısı hâlâ **0** (tüm "
+                "`schedule` geçmişi tarandı) → GitHub'ın kendi tetiklemesi "
+                "kanıtlanmadı; R4 bu yüzden açık ve nöbet bu durumu KIRMIZI "
+                "raporlar."
+                % (tick, v.deadline_hours))
     else:
         run = v.run
         assert run is not None  # state=fired ⇒ run var
@@ -345,9 +353,15 @@ def fetch_runs(repo: str) -> list[Run]:
         import audit_live_ci_sync as alcs
     except ImportError as exc:  # pragma: no cover — kurulum hatası
         raise Unmeasured("audit_live_ci_sync import edilemedi: %s" % exc) from exc
+    # Pencere değil, SUNUCU-TARAFI event filtresi: bu repoda push/PR hacmi
+    # (9 günde ~500 koşum) haftalık `schedule` koşumlarını her sabit `--limit`
+    # penceresinin dışına iter. Filtresiz ölçüm "schedule 0" görüp yanlışlıkla
+    # `missed` hükmü yazdı (2026-11-01: gerçekte 4 koşum var; en eskisi
+    # 2026-10-05T10:51:45Z, run 37299256892).
     argv = [
         "run", "list",
         "--workflow", WORKFLOW_FILE,
+        "--event", "schedule",
         "--limit", str(RUN_LIMIT),
         "--json", "databaseId,createdAt,event,status,conclusion,url",
     ]

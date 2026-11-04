@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -60,7 +60,7 @@ jobs:
         run: pip install playwright==1.63.0
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-1.63.0
@@ -103,9 +103,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── WebKit/Safari cihaz katmanı (macOS) ───────────────────────────────
-  # Safedriver macOS runner'da hazır; Remote Automation `sudo safedriver
-  # --enable` ile açılır. Statik parite katmanı her ortamda koşar, live
-  # katman safedriver yoksa SKIP eder — bu yüzden assert adımı SKIP'i kırmızı
+  # Safari'nin WebDriver'ı `safaridriver` macOS runner'da /usr/bin'de hazır;
+  # Remote Automation `sudo safaridriver --enable` ile açılır. Statik parite
+  # katmanı her ortamda koşar, live katman safaridriver yoksa SKIP eder — bu
+  # yüzden assert adımı SKIP'i kırmızı
   # sayar (aksi halde Safari paritesi hiç ölçülmeden yeşil görünür).
   webkit-devices:
     name: Dashboard devices — WebKit/Safari (weekly, advisory)
@@ -116,13 +117,13 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - name: Enable Safari remote automation
         run: |
-          sudo safedriver --enable 2>&1 | head -5 || true
+          sudo safaridriver --enable 2>&1 | head -5 || true
 
       - name: Run WebKit device-parity smoke
         run: bash _calisma/CIKTI/dashboard_devices_smoke.sh --layer webkit

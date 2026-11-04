@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""test_dashboard_webkit_smoke.py — Safari/WebKit-parite smoke testi (safedriver).
+"""test_dashboard_webkit_smoke.py — Safari/WebKit-parite smoke testi (safaridriver).
 
 Loose bot:
-  - safedriver (WebDriver, Safari) — varsa live WebKit koşumu yapar.
-  - safedriver YOKSA veya Safari Automation kapalıysa SKIP (fail değil):
+  - safaridriver (WebDriver, Safari) — varsa live WebKit koşumu yapar.
+  - safaridriver YOKSA veya Safari Automation kapalıysa SKIP (fail değil):
     battery ubuntu'da da koşar; fail-closed SKIP semantiği playwright suite
     ile aynı ("playwright kurulu değil" kalıbı).
-  - Statik katman (preview.html üzerinden) HER ortamda koşar: safedriver
+  - Statik katman (preview.html üzerinden) HER ortamda koşar: safaridriver
     olmasa bile WebKit-parite hedefi seçici kayması olmadan korunur
     (AGENTS kuralı: "the file must be able to go red with no browser present"
-    — bu katman safedriver olsa da olmasa da gerçek kontratı taşır).
+    — bu katman safaridriver olsa da olmasa da gerçek kontratı taşır).
 
 Live katmanın kapsadığı kontrat (kullanıcı isteği):
   1. Safari'de açılış — WebDriver session + doğru sayfa başlığı/URL.
@@ -21,18 +21,19 @@ Live katmanın kapsadığı kontrat (kullanıcı isteği):
      unload'a kadar hayatta kalmayabilir; bu yüzden kolşu bir
      ?webkit-smoke=1 query'li İKİNCİ gezintiye taşıyan init-script yerine
      reload + öncesi-headers kombinasyonu kullanılır: addInitScript
-     safedriver'da yok; "navigate → inject → reload → read" desenidir).
+     safaridriver'da yok; "navigate → inject → reload → read" desenidir).
 
-safedriver arama sırası (ilk bulunan):
-  - SAFEDRIVER_BIN ortam değişkeni
-  - PATH'te safedriver
-  - /Applications/Xcode.app/Contents/Developer/usr/bin/safedriver
-  - CommandLineTools: /Library/Developer/CommandLineTools/usr/bin/safedriver
+safaridriver arama sırası (ilk bulunan):
+  - SAFARIDRIVER_BIN ortam değişkeni
+  - PATH'te safaridriver
+  - /usr/bin/safaridriver (macOS'ta Safari ile gelen asıl konum)
+  - /Applications/Xcode.app/Contents/Developer/usr/bin/safaridriver
+  - CommandLineTools: /Library/Developer/CommandLineTools/usr/bin/safaridriver
   - Safari.app bundle içi (modern macOS yeri) — bilinen konumlar
 
 CI:
   - advisory `webkit-smoke` job'ı (verify.yml) macOS runner'da
-    `sudo safedriver --enable` ile koşar.
+    `sudo safaridriver --enable` ile koşar.
   - `CI_JOB_COVERAGE["webkit-smoke"]` kaydı (test_coverage_report.py)
     phantom-kayıt tuzağını önler: job gerçekten verify.yml'de olmalı.
 """
@@ -45,6 +46,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 import urllib.error
@@ -54,11 +56,19 @@ HERE = pathlib.Path(__file__).resolve().parent
 HTML = HERE / "preview.html"
 SERVER_SCRIPT = HERE / "preview_server.py"
 
-SAFEDRIVER_CANDIDATES = [
-    shutil.which("safedriver"),
-    os.environ.get("SAFEDRIVER_BIN"),
-    "/Applications/Xcode.app/Contents/Developer/usr/bin/safedriver",
-    "/Library/Developer/CommandLineTools/usr/bin/safedriver",
+# Sunucu başlatma bütçesi: CI runner'ında 30s de yetmedi (ölçülen: SKIP).
+# `ThreadingHTTPServer` bind'ı `socket.getfqdn` için ters DNS yapar; CI'da
+# bu çağrı onlarca saniye bekleyebiliyor. Smoke yalnız *serving* yüzeyine
+# ihtiyaç duyar, bu yüzden bütçe ölçülmüş maliyeti kapsayacak kadar geniş.
+SERVER_START_TIMEOUT_S = 120.0
+SERVER_LOG_TAIL_LINES = 8
+
+SAFARIDRIVER_CANDIDATES = [
+    os.environ.get("SAFARIDRIVER_BIN"),
+    shutil.which("safaridriver"),
+    "/usr/bin/safaridriver",
+    "/Applications/Xcode.app/Contents/Developer/usr/bin/safaridriver",
+    "/Library/Developer/CommandLineTools/usr/bin/safaridriver",
 ]
 
 # Ana paneller — hem statik hem live katmanın ortak kontratı.
@@ -69,11 +79,25 @@ REQUIRED_PANEL_IDS = ("status-board", "m-verdict", "badges", "z3-slide-gallery",
                       "z3-slides", "z3-panel-series", "run-history", "metrics")
 
 
-def find_safedriver():
-    for cand in SAFEDRIVER_CANDIDATES:
+def find_safaridriver():
+    for cand in SAFARIDRIVER_CANDIDATES:
         if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
             return cand
     return None
+
+
+def log_tail(path, lines=SERVER_LOG_TAIL_LINES):
+    """Sunucu günlüğünün son satırları — SKIP'in NEDENİ görünür olsun.
+
+    stderr'in DEVNULL'a gitmesi bu smoke'un ilk kırmızısını teşhis edilemez
+    hale getirmişti; artık başlatma başarısız olursa gerekçe skip mesajında.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            content = [ln.strip() for ln in f if ln.strip()]
+    except OSError:
+        return "(günlük okunamadı)"
+    return " | ".join(content[-lines:]) or "(günlük boş)"
 
 
 def free_port():
@@ -94,7 +118,7 @@ def wait_for_port(port, timeout=15):
 
 
 class WebDriver:
-    """Minimal stdlib WebDriver client — safedriver JSON/HTTP protokolü."""
+    """Minimal stdlib WebDriver client — safaridriver JSON/HTTP protokolü."""
 
     def __init__(self, port):
         self.base = f"http://127.0.0.1:{port}"
@@ -138,8 +162,8 @@ class WebDriver:
                 self.session_id = None
 
 
-def start_safedriver(safedriver_bin, port):
-    proc = subprocess.Popen([safedriver_bin, "--port", str(port)],
+def start_safaridriver(safaridriver_bin, port):
+    proc = subprocess.Popen([safaridriver_bin, "--port", str(port)],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
@@ -151,7 +175,7 @@ def start_safedriver(safedriver_bin, port):
         except Exception:
             time.sleep(0.3)
     proc.terminate()
-    raise RuntimeError("safedriver did not become ready within 15s")
+    raise RuntimeError("safaridriver did not become ready within 15s")
 
 
 ERROR_COLLECTOR = """
@@ -167,23 +191,31 @@ window.addEventListener('unhandledrejection', function (e) {
 
 
 class WebkitSmokeLiveBase(unittest.TestCase):
-    """safedriver + Safari ile koşan live katman (env-gated)."""
+    """safaridriver + Safari ile koşan live katman (env-gated)."""
 
     @classmethod
     def setUpClass(cls):
-        cls.safedriver_bin = find_safedriver()
-        if cls.safedriver_bin is None:
-            raise unittest.SkipTest("safedriver yok (Xcode/CLT kurulu değil) — statik katman koştu")
+        cls.safaridriver_bin = find_safaridriver()
+        if cls.safaridriver_bin is None:
+            raise unittest.SkipTest("safaridriver yok (Safari/Xcode/CLT kurulu değil) — statik katman koştu")
         cls.driver_port = free_port()
-        cls.safedriver = start_safedriver(cls.safedriver_bin, cls.driver_port)
+        cls.driver_proc = start_safaridriver(cls.safaridriver_bin, cls.driver_port)
         cls.PORT = free_port()
+        cls.server_log = tempfile.NamedTemporaryFile(
+            "w+", prefix="webkit_preview_server_", suffix=".log", delete=False)
         cls.server = subprocess.Popen(
             [sys.executable, str(SERVER_SCRIPT), "--dir", str(HERE),
              "--preview-dir", str(HERE), "--port", str(cls.PORT),
              "--bind", "127.0.0.1", "--interval", "3600"],
-            cwd=str(HERE), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if not wait_for_port(cls.PORT, timeout=15):
-            raise unittest.SkipTest("preview_server başlamadı (env)")  # pragma: no cover
+            cwd=str(HERE), stdout=cls.server_log, stderr=subprocess.STDOUT)
+        started_at = time.monotonic()
+        if not wait_for_port(cls.PORT, timeout=SERVER_START_TIMEOUT_S):
+            elapsed = time.monotonic() - started_at
+            detail = log_tail(cls.server_log.name)
+            sys.stderr.write("preview_server günlüğü: %s\n" % detail)
+            raise unittest.SkipTest(
+                "preview_server başlamadı (%.0fs, süreç canlı=%s) — gerekçe: %s"
+                % (elapsed, cls.server.poll() is None, detail))
         try:
             cls.driver = WebDriver(cls.driver_port)
             cls.driver.new_session()
@@ -198,10 +230,17 @@ class WebkitSmokeLiveBase(unittest.TestCase):
     def tearDownClass(cls):
         if getattr(cls, "driver", None) is not None:
             cls.driver.delete_session()
-        if getattr(cls, "safedriver", None) is not None:
-            cls.safedriver.terminate()
+        if getattr(cls, "driver_proc", None) is not None:
+            cls.driver_proc.terminate()
         if getattr(cls, "server", None) is not None:
             cls.server.terminate()
+        log_file = getattr(cls, "server_log", None)
+        if log_file is not None:
+            try:
+                log_file.close()
+                os.unlink(log_file.name)
+            except OSError:
+                pass
 
     def _load_with_collector(self):
         base = f"http://127.0.0.1:{self.PORT}"
@@ -259,14 +298,14 @@ class TestWebkitStaticContract(unittest.TestCase):
         slides = re.findall(r'src="/slides_z3/([^"/]+)\.png"', text)
         self.assertEqual(tuple(slides), EXPECTED_TABS)
 
-    def test_safedriver_availability_is_bounded(self):
+    def test_safaridriver_availability_is_bounded(self):
         """Live katman skip'i fail'e dönüşmemeli: arama yüzeyi kapanmış olmalı."""
-        bin_path = find_safedriver()
+        bin_path = find_safaridriver()
         if bin_path is None:
-            self.skipTest("safedriver yok — live katman skip (yanlış fail olmama kanıtı)")
+            self.skipTest("safaridriver yok — live katman skip (yanlış fail olmama kanıtı)")
         # Bulunduysa binary gerçekten koşabilir mi? (--version hızlı koşum)
         rc = subprocess.run([bin_path, "--version"], capture_output=True, timeout=30).returncode
-        self.assertIn(rc, (0, 1), f"safedriver --version beklenmedik rc: {rc}")
+        self.assertIn(rc, (0, 1), f"safaridriver --version beklenmedik rc: {rc}")
 
 
 if __name__ == "__main__":

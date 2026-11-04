@@ -51,10 +51,9 @@ def _run(protection, expected=EXPECTED, token="tok", argv=("--json",)):
     patches = [mock.patch.object(cpd, "token_from_env", return_value=token),
                mock.patch.object(cpd, "repo_slug",
                                  return_value=("owner/name", None)),
-               mock.patch.object(cpd.sc, "gate_jobs",
-                                 return_value={"a": "alpha", "b": "beta"}
-                                 if expected is None else
-                                 {str(i): n for i, n in enumerate(expected)})]
+               mock.patch.object(cpd.sc, "expected_checks",
+                                 return_value=["alpha", "beta"]
+                                 if expected is None else list(expected))]
     if isinstance(protection, tuple):
         # (None, "HTTP 403") gibi "okunamadı" şekli — fetch_protection'ın
         # gerçek hata dönüşü (yükseltmez, DÖNER).

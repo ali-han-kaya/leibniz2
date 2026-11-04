@@ -56,7 +56,10 @@ def main(argv=None):
         repo = args.repo or run_gh(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
         sys.path.insert(0, __import__("os").path.dirname(__file__))
         import status_checks
-        checks = list(status_checks.gate_jobs().values())
+        # required set = verify.yml + beyan edilen ikincil workflow'lar
+        # (docker-security); yalnız gate_jobs() kullanmak yeni required
+        # check'leri oran tablosundan düşürürdü.
+        checks = list(status_checks.expected_checks())
         runs = list_runs(repo, args.branch, args.limit)
         jobs = [view_jobs(repo, r["databaseId"]) for r in runs]
         rates = calculate(checks, jobs)

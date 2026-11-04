@@ -87,8 +87,8 @@ class TestMain(unittest.TestCase):
         return sbp.main(argv)
 
     def test_install_puts_expected_checks(self):
-        with mock.patch.object(sbp.sc, "gate_jobs",
-                               return_value=self.EXPECTED), \
+        with mock.patch.object(sbp.sc, "expected_checks",
+                               return_value=list(self.EXPECTED.values())), \
                 mock.patch.object(sbp, "gh_get",
                                   return_value=_current_protection()) as get, \
                 mock.patch.object(sbp, "gh_put") as put:
@@ -102,8 +102,8 @@ class TestMain(unittest.TestCase):
         self.assertFalse(body["allow_force_pushes"])
 
     def test_dry_run_does_not_put(self):
-        with mock.patch.object(sbp.sc, "gate_jobs",
-                               return_value=self.EXPECTED), \
+        with mock.patch.object(sbp.sc, "expected_checks",
+                               return_value=list(self.EXPECTED.values())), \
                 mock.patch.object(sbp, "gh_get",
                                   return_value=_current_protection()), \
                 mock.patch.object(sbp, "gh_put") as put:
@@ -113,8 +113,8 @@ class TestMain(unittest.TestCase):
 
     def test_fresh_404_installs_from_scratch(self):
         # Koruma yok (gh_get 404) → sıfırdan kur; PUT yine çağrılır.
-        with mock.patch.object(sbp.sc, "gate_jobs",
-                               return_value=self.EXPECTED), \
+        with mock.patch.object(sbp.sc, "expected_checks",
+                               return_value=list(self.EXPECTED.values())), \
                 mock.patch.object(sbp, "gh_get",
                                   side_effect=RuntimeError("HTTP 404: Not Found")), \
                 mock.patch.object(sbp, "gh_put") as put:
@@ -126,8 +126,8 @@ class TestMain(unittest.TestCase):
         self.assertIsNone(body["required_pull_request_reviews"])
 
     def test_verify_pass_returns_0(self):
-        with mock.patch.object(sbp.sc, "gate_jobs",
-                               return_value=self.EXPECTED), \
+        with mock.patch.object(sbp.sc, "expected_checks",
+                               return_value=list(self.EXPECTED.values())), \
                 mock.patch.object(sbp, "gh_get",
                                   return_value=_current_protection()), \
                 mock.patch.object(sbp, "gh_put"), \
@@ -139,8 +139,8 @@ class TestMain(unittest.TestCase):
 
     def test_verify_fail_returns_1(self):
         # Kurulum sonrası hâlâ drift → fail-closed exit 1.
-        with mock.patch.object(sbp.sc, "gate_jobs",
-                               return_value=self.EXPECTED), \
+        with mock.patch.object(sbp.sc, "expected_checks",
+                               return_value=list(self.EXPECTED.values())), \
                 mock.patch.object(sbp, "gh_get",
                                   return_value=_current_protection()), \
                 mock.patch.object(sbp, "gh_put"), \
@@ -150,8 +150,8 @@ class TestMain(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     def test_put_failure_returns_1(self):
-        with mock.patch.object(sbp.sc, "gate_jobs",
-                               return_value=self.EXPECTED), \
+        with mock.patch.object(sbp.sc, "expected_checks",
+                               return_value=list(self.EXPECTED.values())), \
                 mock.patch.object(sbp, "gh_get",
                                   return_value=_current_protection()), \
                 mock.patch.object(sbp, "gh_put",
@@ -160,7 +160,7 @@ class TestMain(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     def test_empty_expected_returns_2(self):
-        with mock.patch.object(sbp.sc, "gate_jobs", return_value={}):
+        with mock.patch.object(sbp.sc, "expected_checks", return_value=[]):
             rc = self._run(["--repo", "owner/name"])
         self.assertEqual(rc, 2)
 

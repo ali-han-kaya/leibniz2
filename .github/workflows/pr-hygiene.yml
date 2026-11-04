@@ -1,0 +1,78 @@
+name: pr-hygiene
+
+# ────────────────────────────────────────────────────────────────────────────
+# PR BOARD HİJYENİ — BİRİKİMİ ÖNLER (2026-11-04 olayının otomasyonu)
+#
+# Ölçülen sorun: main ilerledikçe açık PR'lar hiçbir aktör tarafından
+# güncellenmedi; board sessizce BEHIND/DIRTY'ye düştü ve 17 PR aynı anda
+# birikti. Tek tek çakışma çözümü (PR #192) tek seferlikti; bu workflow
+# aynı birikimin tekrar oluşmasını engeller.
+#
+# Her main push'unda:
+#   1) board ölçülür (açık / BEHIND / DIRTY / BLOCKED / taslak / bayat),
+#   2) BEHIND + taslak-değil + `hold` etiketsiz PR'lar rebase edilir
+#      (en fazla 5 — koşum maliyeti sınırlı),
+#   3) tek bir izleme issue'su açılır/güncellenir; board temizse kapatılır.
+#
+# Fail-closed: `gh` çağrısı başarısızsa (token/API) iş KIRMIZI biter — sessiz
+# "temiz" yok. Eşik aşımı (varsayılan 8 açık PR) de KIRMIZI sinyaldir.
+# DIRTY PR'lar otomatik rebase EDİLMEZ: gerçek çakışma insan kararıdır.
+# `/hold` etiketi bir PR'ı otomatik güncellemeden muaf tutar.
+# ────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "BEHIND PR'ları rebase et"
+        type: boolean
+        default: true
+      issue:
+        description: "İzleme issue'sunu senkronla"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hygiene:
+    name: PR board hygiene (pileup guard)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (gate script only)
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: _calisma/CIKTI
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Measure board, rebase BEHIND PRs, sync tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          apply="true"
+          issue="true"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            apply="${{ inputs.apply }}"
+            issue="${{ inputs.issue }}"
+          fi
+          args=(--max-updates 5)
+          if [ "$apply" = "true" ]; then args+=(--apply); else args+=(--check); fi
+          if [ "$issue" = "true" ]; then args+=(--issue); fi
+          python3 _calisma/CIKTI/pr_hygiene.py "${args[@]}"

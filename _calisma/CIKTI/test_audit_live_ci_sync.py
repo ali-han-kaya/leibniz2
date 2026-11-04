@@ -495,6 +495,155 @@ class TestSkippedUpstreamVsDrift(unittest.TestCase):
         self.assertEqual(d["artifacts"]["missing"], ["reports"])
 
 
+class TestRunningProducerNotDrift(unittest.TestCase):
+    """Koşum ortası üretici: `conclusion` null ≠ gerçek drift.
+
+    `conclusion` yalnız job TAMAMLANINCA dolar; hâlâ koşan bir job'ın
+    artifact'ı canlıda henüz yoktur. Eski sınıflama bunu "producer sonuç
+    bilinmiyor" diye gerçek drift sayıp advisory audit'i fail-closed FAIL'e
+    çeviriyordu. Ayrıcalık YALNIZ pozitif kanıtla (`status` okundu ve
+    koşuyor) verilir; status okunamadıysa ya da job bitmişse davranış
+    eskisi gibi fail-closed kalır.
+    """
+
+    REPORTS = "Static markdown reports (incl. pre-commit findings)"
+    VERIFY = "Delivery verification — K1-K19 (single entry point)"
+
+    DOC_TEXT = (
+        "**Job kategorileri (2 job):**\n"
+        "| 1 | A | Static markdown reports (incl. pre-commit findings) | ✅ |\n"
+        "| 2 | A | Delivery verification — K1-K19 (single entry point) | ✅ |\n"
+        "\n**Artifact listesi (2):**\n"
+        "- `reports`\n"
+        "- `python3-shell`\n"
+    )
+
+    # ── sınıflama birimi ────────────────────────────────────────────────
+    def test_running_producer_is_not_drift(self):
+        res = als.classify_artifact_drift(
+            ["unit-tests", "reports"], ["unit-tests"], {},
+            {self.REPORTS: "in_progress"})
+        self.assertEqual(res["missing"], [])
+        self.assertEqual(res["producer_running"], ["reports"])
+        self.assertEqual(res["upstream_skipped"], [])
+        self.assertTrue(res["ok"])
+
+    def test_queued_producer_is_not_drift(self):
+        res = als.classify_artifact_drift(
+            ["reports"], [], {}, {self.REPORTS: "queued"})
+        self.assertEqual(res["producer_running"], ["reports"])
+        self.assertTrue(res["ok"])
+
+    def test_completed_producer_missing_artifact_is_still_drift(self):
+        # Fail-closed: job bitti ve artifact yok → gerçek drift (skipped
+        # DEĞİL, koşuyor da DEĞİL).
+        res = als.classify_artifact_drift(
+            ["unit-tests", "reports"], ["unit-tests"],
+            {self.REPORTS: "success"},
+            {self.REPORTS: "completed"})
+        self.assertEqual(res["missing"], ["reports"])
+        self.assertEqual(res["producer_running"], [])
+        self.assertFalse(res["ok"])
+
+    def test_unmeasured_status_is_still_drift(self):
+        # "Ölçemedim" muafiyet değildir: status yoksa eski (fail-closed)
+        # davranış korunur.
+        for statuses in (None, {}):
+            with self.subTest(statuses=statuses):
+                res = als.classify_artifact_drift(
+                    ["reports"], [], {}, statuses)
+                self.assertEqual(res["missing"], ["reports"])
+                self.assertFalse(res["ok"])
+
+    def test_running_other_job_does_not_exempt(self):
+        # Ayrıcalık artifact'ın KENDİ üreticisine bağlı.
+        res = als.classify_artifact_drift(
+            ["reports"], [], {}, {self.VERIFY: "in_progress"})
+        self.assertEqual(res["missing"], ["reports"])
+        self.assertFalse(res["ok"])
+
+    def test_extra_still_fails_while_producer_runs(self):
+        res = als.classify_artifact_drift(
+            ["reports"], ["yarin-yeni-artifact"], {},
+            {self.REPORTS: "in_progress"})
+        self.assertEqual(res["extra"], ["yarin-yeni-artifact"])
+        self.assertFalse(res["ok"])
+
+    # ── main() uçtan uca ───────────────────────────────────────────────
+    def _run_main(self, live_artifacts, statuses, conclusions=None):
+        live = list(dict.fromkeys(live_artifacts + [als.SELF_ARTIFACT]))
+        jobs = list(dict.fromkeys([self.REPORTS, self.VERIFY, als.SELF_JOB]))
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(self.DOC_TEXT, encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                 mock.patch.object(als, "get_latest_run",
+                                   return_value={"databaseId": 1,
+                                                 "headSha": "abc"}), \
+                 mock.patch.object(als, "get_run_jobs", return_value=jobs), \
+                 mock.patch.object(als, "get_run_artifacts", return_value=live), \
+                 mock.patch.object(als, "get_run_job_conclusions",
+                                   return_value=conclusions or {}), \
+                 mock.patch.object(als, "get_run_job_statuses",
+                                   return_value=statuses), \
+                 mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json"])
+            d = json.loads(buf.getvalue())
+        return rc, d
+
+    def test_main_running_producer_passes_and_reports_it(self):
+        rc, d = self._run_main(["python3-shell"], {self.REPORTS: "in_progress"})
+        self.assertEqual(rc, 0, d)
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertEqual(d["artifacts"]["missing"], [])
+        self.assertEqual(d["artifacts"]["producer_running"], ["reports"])
+
+    def test_main_pinned_artifact_exempt_while_producer_runs(self):
+        # python3-shell yok ama üreticisi (verify) koşuyor → pinned kapı da
+        # muaf; verdict PASS kalır.
+        rc, d = self._run_main(["reports"], {self.VERIFY: "in_progress"})
+        self.assertEqual(rc, 0, d)
+        self.assertEqual(d["verdict"], "PASS")
+        self.assertEqual(d["artifacts"]["producer_running"], ["python3-shell"])
+        self.assertTrue(d["artifacts"]["required_presence"]["ok"])
+
+    def test_main_pinned_artifact_still_fails_when_producer_finished(self):
+        rc, d = self._run_main(
+            ["reports"], {self.VERIFY: "completed"},
+            {self.VERIFY: "success"})
+        self.assertEqual(rc, 1)
+        self.assertEqual(d["verdict"], "FAIL")
+        self.assertIn("python3-shell (live)",
+                      d["artifacts"]["required_presence"]["missing"])
+
+    def test_main_status_lookup_failure_keeps_fail_closed(self):
+        # Status okunamıyorsa muafiyet YOK: eksik artifact yine FAIL.
+        live = ["python3-shell", als.SELF_ARTIFACT]
+        jobs = [self.REPORTS, self.VERIFY, als.SELF_JOB]
+        with tempfile.TemporaryDirectory() as td:
+            doc = pathlib.Path(td) / "PUBLISH_SCENARIO.md"
+            doc.write_text(self.DOC_TEXT, encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.object(als, "get_repo", return_value="o/r"), \
+                 mock.patch.object(als, "get_latest_run",
+                                   return_value={"databaseId": 1,
+                                                 "headSha": "abc"}), \
+                 mock.patch.object(als, "get_run_jobs", return_value=jobs), \
+                 mock.patch.object(als, "get_run_artifacts", return_value=live), \
+                 mock.patch.object(als, "get_run_job_conclusions",
+                                   return_value={self.REPORTS: "success"}), \
+                 mock.patch.object(als, "get_run_job_statuses",
+                                   side_effect=RuntimeError("gh api down")), \
+                 mock.patch.object(sys, "stdout", new=buf):
+                rc = als.main(["--doc", str(doc), "--json"])
+            d = json.loads(buf.getvalue())
+        self.assertEqual(rc, 1)
+        self.assertEqual(d["verdict"], "FAIL")
+        self.assertEqual(d["artifacts"]["missing"], ["reports"])
+        self.assertEqual(d["artifacts"]["producer_running"], [])
+
+
 class TestMainFailClosed(unittest.TestCase):
     def setUp(self):
         self.tmp = pathlib.Path(__file__).parent / ".audit_tmp_doc.md"

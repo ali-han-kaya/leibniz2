@@ -117,6 +117,13 @@
 #                               diyagram yeniden üretilmezse commit bloke
 #                               (fail-closed, read-only). Ölçüm imkânsızsa
 #                               (PyYAML/kaynak yok) rc=2 — sessiz PASS yok.
+#   23) check-latex-surface   : tracked .tex yüzeyinde aktif $$ display
+#                               delimiter'ını, aynı \input/\include grafında
+#                               label'sız \ref/\eqref/\autoref/\cref/\pageref
+#                               kullanımını, çözülemeyen \input hedefini ve
+#                               aynı grafta yinelenen \label'ı fail-closed
+#                               bloke eder (yorumlar yok sayılır; OFFLINE,
+#                               stdlib-only).
 # Herhangi bir P0/P1 bulgusu commit'i bloke eder (sıfır-dışı exit).
 #
 # Not: ÜÇ yazan hook vardır: update-config (config'i paket içeriğiyle
@@ -261,6 +268,23 @@ repos:
         pass_filenames: true
         stages: [pre-commit]
 
+      - id: check-latex-surface
+        name: "Check LaTeX surface (fail-closed)"
+        description: >-
+          Tracked .tex dosyalarında aktif $$ display delimiter'ını ve aynı
+          \input/\include yüzeyinde label'a bağlanmayan \ref, \eqref,
+          \autoref, \cref veya \pageref çağrılarını bulur. Çözülemeyen
+          \input hedefi ve aynı grafta yinelenen \label de bulgudur.
+          Yorumlar yok sayılır (byte offset korunur); bağımsız el yazması
+          kopyalarındaki aynı label yanlış-pozitif üretmez. Bulgu varsa
+          commit bloke eder. OFFLINE, stdlib-only.
+        entry: python3 _calisma/CIKTI/check_latex_surface.py --root .
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: actionlint
         name: Lint workflow YAML (actionlint)
         description: >-
@@ -363,12 +387,20 @@ repos:
           yoksa kapı UNREADABLE sonucunu gizlemez; okuma yetkisi admin izni
           ister — ortamda PROTECTION_PAT (fine-grained, Administration: read)
           veya gh auth olmalı (GH_ADMIN_TOKEN yedek isimdir).
+          CI ortamında administration token'ı YOKTUR: hook orada dürüstçe
+          SKIP eder (canlı koruma denetimi `protection-drift` workflow'unda
+          fail-closed koşar); SKIP PASS değildir, gerekçesi loglanır.
         # venv-guard (686/705 satırlarıyla aynı desen): status_checks.py
         # PyYAML ister; sistem python3'ünde PyYAML yoksa modül importu
         # çöker ve kapı sahte-FAIL verir. Repo venv'i (fresh_clone_setup
         # adım 1: yaml içerir) varsa onunla koş.
-        entry: bash -c 'PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
-          PY=_calisma/.venv_z3/bin/python; exec "$PY" _calisma/CIKTI/status_checks.py --gh --json'
+        entry: >-
+          bash -c 'if [ -n "${CI:-}" ] && [ -z "${PROTECTION_PAT:-}${GH_ADMIN_TOKEN:-}" ]; then
+          echo "SKIP — CI ortamında PROTECTION_PAT/GH_ADMIN_TOKEN yok; canlı koruma
+          okuması protection-drift workflow unda fail-closed koşar"; exit 0; fi;
+          PY=python3; [ -x _calisma/.venv_z3/bin/python ] &&
+          PY=_calisma/.venv_z3/bin/python; exec "$PY"
+          _calisma/CIKTI/status_checks.py --gh --json'
         language: system
         always_run: true
         pass_filenames: false
@@ -504,6 +536,12 @@ repos:
           ad drift ederse commit bloke — `--write` sayıları ve EXCLUDE'ı
           düzeltir, ad listeleri elle güncellenir. OFFLINE, stdlib-only, ~0.3s.
         entry: python3 _calisma/CIKTI/check_status_check_doc_sync.py
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+        verbose: true
+
       - id: check-id-residual-doc-sync
         name: "Verify ID_RESIDUAL_ACCEPTANCE §4 ↔ donmuş sidecar (fail-closed)"
         description: >-

@@ -29,6 +29,7 @@ test_check_doc_wrapper_sync.py
 test_check_hook_env_matrix.py
 test_check_hook_unstaged_deps.py
 test_check_id_residual_doc_sync.py
+test_check_latex_surface.py
 test_check_lean_axioms.py
 test_check_lean_statements.py
 test_check_mirror_coverage.py
@@ -123,6 +124,7 @@ test_pdf_source_freshness.py
 test_plist_check_workflow.py
 test_plist_keepalive_golden.py
 test_pptx_export.py
+test_pr_hygiene.py
 test_precheck_advisory_contract.py
 test_precommit_log.py
 test_preview_a11y_panel.py

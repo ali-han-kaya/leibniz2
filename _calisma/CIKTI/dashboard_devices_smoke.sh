@@ -15,7 +15,7 @@
 #   chromium — test_preview_interaction_cdp.py   (hover/filtre/lightbox)
 #              test_dashboard_playwright_smoke.py (SSE + CSP render)
 #              test_dashboard_keyboard_nav.py     (klavye kapsamı)
-#   webkit   — test_dashboard_webkit_smoke.py    (Safari paritesi, safedriver)
+#   webkit   — test_dashboard_webkit_smoke.py    (Safari paritesi, safaridriver)
 #
 # SKIP semantiği (docker_security_smoke.sh ile aynı sözleşme):
 #   Tarayıcı/sürücü bu ortamda YOKSA katman SKIP döner (exit 0) — yerel
@@ -87,14 +87,14 @@ sys.exit(0 if os.path.isfile(exe) else 1)
 PROBE
 }
 
-# WebKit yoklaması: testin KENDİ arayıcısı (safedriver aday listesi tek
+# WebKit yoklaması: testin KENDİ arayıcısı (safaridriver aday listesi tek
 # kaynakta kalsın — burada ikinci bir liste kopyalanmaz).
 webkit_probe() {
   PYTHONPATH="$CIKTI${PYTHONPATH:+:$PYTHONPATH}" "$PY" - >/dev/null 2>&1 <<'PROBE'
 import sys
 import test_dashboard_webkit_smoke as m
 
-sys.exit(0 if m.find_safedriver() else 1)
+sys.exit(0 if m.find_safaridriver() else 1)
 PROBE
 }
 
@@ -123,6 +123,23 @@ run_layer() {
     LAYER_VERDICT=FAIL
     return 1
   fi
+
+  # Yoklama GEÇSE BİLE live katman setUpClass'ta atlanabilir (sürücü var ama
+  # Safari Remote Automation kapalı → oturum kurulamaz). unittest skip'leri
+  # rc=0 döner; bu yüzden "kanıtsız PASS" burada kırılır — aksi halde haftalık
+  # cron yeşil görünürken hiçbir WebKit kanıtı üretmemiş olur (K5 sözleşmesi:
+  # SKIP kanıt değildir).
+  case "$layer" in
+    webkit)
+      if ! grep -qE 'WebkitSmokeLiveBase\.test_' "$report"; then
+        say "SKIP: $layer katmanı yoklamayı geçti ama live koşum yok (Safari Remote Automation kapalı olabilir) — kanıt üretilmedi"
+        say "layer=$layer verdict=SKIP"
+        LAYER_VERDICT=SKIP
+        return 0
+      fi
+      ;;
+  esac
+
   say "layer=$layer verdict=PASS"
   LAYER_VERDICT=PASS
   return 0
