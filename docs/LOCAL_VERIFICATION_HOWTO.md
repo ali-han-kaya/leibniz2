@@ -139,3 +139,36 @@ pre-commit hook'u var (hafif, hook zaten koşar) · **C** dış ortam bağımlı
 - `test_fresh_clone_setup.py` dışarıda bırakıldı; gerekçe artık yorum değil
   ölçüm (60.6s → 74s → 120s+ timeout).
 - Hook süresi: 184 dosya 139.6s → **185 dosya 148.0s** (daemon_http dahil).
+
+## 7. Dal temizlik önerisi — kapsam kanıtıyla
+
+Squash/rebase merge'ler dal commit'lerini ana hatta bırakmaz: `git branch
+--merged` boş döner, PR "MERGED" görünür ama dal ucu `main`'in atası değildir.
+Bu yüzden "bu dal silinebilir mi?" sorusu **içerikten** yanıtlanır:
+
+```bash
+python3 _calisma/CIKTI/branch_cleanup_advisor.py --base origin/main
+python3 _calisma/CIKTI/branch_cleanup_advisor.py --json --commands   # CI/otomasyon
+```
+
+| Kanıt | Anlamı | Öneri |
+|---|---|---|
+| `ANCESTOR` | Dal ucu base'in atası (fast-forward) | DELETE |
+| `EMPTY` | Dal base ile aynı uçta, taşınan commit yok | DELETE |
+| `SAME_TREE` | Ağaç base ile birebir aynı | DELETE |
+| `CONTENT` | Dalın değiştirdiği **her** dosya base'de birebir aynı (`n/m` raporlanır) | DELETE |
+| `PATCH_ID` | `git cherry` base'de eşleşmeyen commit bırakmıyor | DELETE |
+| `MERGE` | İçerik tam eşleşmiyor + dalda merge commit'i var (`git cherry` merge'leri listelemez) | REVIEW |
+| `PARTIAL` | Dosyaların bir kısmı aynı, kalanı farklı | REVIEW |
+| `UNIQUE` | Base'de karşılığı olmayan içerik/commit | KEEP |
+
+Sözleşmeler:
+
+- Araç **salt-okunur**: hiçbir dal/ref/reflog değiştirmez, ağa çıkmaz; silme
+  komutlarını yalnız `--commands` ile *yazdırır*, koşmaz.
+- `--json` stdout'u **tek** JSON dokümanıdır (`verdict`, `summary`,
+  `branches`, `delete_commands`); özet/verdict satırı stderr'e gider.
+- Base çözülemezse rc=2 (`verdict: ERROR`) — sessiz "silebilirsin" yok.
+- Ölçüm (2026-11-04, bu ağaç): 83 dal → 32 DELETE · 32 REVIEW · 19 KEEP;
+  13 dal `MERGE` sınıfında, yani içerik farkı merge çözümünden geliyor —
+  bunlar silinmez, tek tek bakılır.
