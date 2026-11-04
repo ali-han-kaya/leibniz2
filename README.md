@@ -708,6 +708,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-04 | docs | (incidents) PR birikimi olayını ve hijyen botunu kaydet (#195) | [`9d6589e`](https://github.com/ali-han-kaya/leibniz2/commit/9d6589e) |
 | 2026-11-04 | ci | (changelog) heal sonrası temiz main'de verify tetikle (#197) | [`1693a96`](https://github.com/ali-han-kaya/leibniz2/commit/1693a96) |
 | 2026-11-04 | docs | (deploy) 1693a968 kanit satirini ekle, gap 4'ten 0'a | [`be0ffbb4`](https://github.com/ali-han-kaya/leibniz2/commit/be0ffbb4) |
+| 2026-11-04 | ci | (changelog) heal merge beklemesini 20 dk'ya çıkar (#199) | [`f100016`](https://github.com/ali-han-kaya/leibniz2/commit/f100016) |
 
 ### Regresyon notları
 
