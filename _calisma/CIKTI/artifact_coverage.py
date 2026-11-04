@@ -39,4 +39,5 @@ DOC_ONLY_ADVISORY = frozenset({
     "audit-live-ci",
     "pattern-drift",
     "preview-reload-smoke",
+    "docx-report",
 })
