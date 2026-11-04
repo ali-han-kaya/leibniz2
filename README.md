@@ -700,6 +700,8 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-01 | docs | (texlive) Faz 0-1 kapanışını ölçülen kanıtlarla işaretle | [`caeeba03`](https://github.com/ali-han-kaya/leibniz2/commit/caeeba03) |
 | 2026-11-01 | docs | (deploy) cf434244 kanit satirini ekle, gap 4'ten 0'a | [`6ced9cb`](https://github.com/ali-han-kaya/leibniz2/commit/6ced9cb) |
 | 2026-11-01 | chore | (changelog) caeeba03 satirini tabloya ekle | [`8c50383`](https://github.com/ali-han-kaya/leibniz2/commit/8c50383) |
+| 2026-11-03 | test | (preview-server) drain için subprocess regresyon testi | [`549ace0`](https://github.com/ali-han-kaya/leibniz2/commit/549ace0) |
+| 2026-11-03 | docs | (deploy) [bot] R4 cron kanıt parçası (schedule tick) | [`8000d9b`](https://github.com/ali-han-kaya/leibniz2/commit/8000d9b) |
 
 ### Regresyon notları
 
