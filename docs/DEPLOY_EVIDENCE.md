@@ -407,3 +407,16 @@ kapatma dispatch'i yeşili üretir), `docker-security` #41788451085,
 `test-smoke` #41788451079 (success), determinism hücresi son main
 ölçümünü taşır (#41435252478, 2026-11-02 haftalık success).
 | 2026-11-04 | 1693a968 | [failure #41788451125](https://github.com/ali-han-kaya/leibniz2/actions/runs/41788451125) | [success #41788451085](https://github.com/ali-han-kaya/leibniz2/actions/runs/41788451085) | [success #41788451079](https://github.com/ali-han-kaya/leibniz2/actions/runs/41788451079) | [success #41435252478](https://github.com/ali-han-kaya/leibniz2/actions/runs/41435252478) |
+
+`a64ee363` — PR #204 (`feat(docx): reword-working docx export zincirini land
+et`) squash'ı: `1693a968` satırının üstüne **1 anlamlı** commit ve heal'ın iki
+`chore(changelog): [bot]` commit'i geldi (`c8a5c63a`, `e672260a` — `[bot]` META
+öneki `find_missing_commits` tarafından sayılmaz) → boşluk **3/3** sınırına
+dayandı ve sıradaki anlamlı merge main'i kırmızıya çevirecekti. Bu `docs(deploy)`
+satırı boşluğu **0**'a çekiyor (`substantive_gap(c8a5c63a, main)` = 0; satırı
+yazan commit ve merge'ü de `docs(deploy)` → exempt). Hücreler `event=push`,
+`headSha=c8a5c63a`: `verify-delivery` #41901633555 (**success** — #204
+merge'ünden sonraki ilk tam koşum), `docker-security` #41901633551, `test-smoke`
+#41901585410 (`a64ee363`), determinism hücresi son haftalık ölçümü taşır
+(#41435252478, 2026-11-02 success; `headSha=85da7690`).
+| 2026-11-04 | c8a5c63a | [success #41901633555](https://github.com/ali-han-kaya/leibniz2/actions/runs/41901633555) | [success #41901633551](https://github.com/ali-han-kaya/leibniz2/actions/runs/41901633551) | [success #41901585410](https://github.com/ali-han-kaya/leibniz2/actions/runs/41901585410) | [success #41435252478](https://github.com/ali-han-kaya/leibniz2/actions/runs/41435252478) |
