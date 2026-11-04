@@ -129,12 +129,25 @@ def dockerfile_ledger_cves(dockerfile: str, packages) -> dict:
                 break
             continue
         header = re.match(r"#\s+([A-Za-z0-9][A-Za-z0-9.+_-]*):\s*(.*)$", s)
+        names = [header.group(1)] if header else []
+        if not header:
+            # Aynı kaynak paket iki adla taranabiliyor: "libssl3 + openssl".
+            # Başlık adları `+`/`/` ile ayrılır; CVE'ler adların HEPSİNE yazılır.
+            multi = re.match(
+                r"#\s+([A-Za-z0-9][A-Za-z0-9.+_ -]*(?:\s*[+/]\s*"
+                r"[A-Za-z0-9][A-Za-z0-9.+_-]*)+):\s*(.*)$", s)
+            if multi:
+                names = [n.strip() for n in re.split(r"\s*[+/]\s*",
+                                                     multi.group(1))]
+                header = multi
         if header:
-            current = header.group(1) if header.group(1) in out else None
-            if current:
-                out[current] |= set(_CVE_RE.findall(header.group(2)))
+            matched = [n for n in names if n in out]
+            current = matched or None
+            for n in matched:
+                out[n] |= set(_CVE_RE.findall(header.group(2)))
         elif current:
-            out[current] |= set(_CVE_RE.findall(s))
+            for n in current:
+                out[n] |= set(_CVE_RE.findall(s))
     return out
 
 
@@ -152,10 +165,20 @@ def doc_ledger(doc: str) -> dict:
         if len(cells) < 3 or cells[0] == "Paket" or set(cells[0]) <= set("-: "):
             continue
         floor_cell = cells[2].split()
-        rows[cells[0].strip("`")] = {
-            "floor": floor_cell[0] if floor_cell else "",
-            "cves": set(_CVE_RE.findall(cells[1])),
-        }
+        floor = floor_cell[0] if floor_cell else ""
+        if floor.startswith("**"):
+            # "**eklenmedi (kasıtlı)**" — bilinçli floor'suz kayıt (pip).
+            # ARG defterinin parçası değildir; paket kümesi karşılaştırmasına
+            # girmez (gerekçe aynı satırın kanıt hücresinde yazılı).
+            continue
+        # Aynı kaynak paket iki adla taranıyor: "libssl3 / openssl".
+        names = [n.strip().strip("`")
+                 for n in re.split(r"\s*[/+]\s*", cells[0]) if n.strip()]
+        for name in names:
+            rows[name] = {
+                "floor": floor,
+                "cves": set(_CVE_RE.findall(cells[1])),
+            }
     return rows
 
 
