@@ -33,6 +33,14 @@
 #   setuptools: pip/pkg_resources zinciri HIGH CVE'si → floor >=80
 #   wheel: CVE-2026-24049 (privesc) → floor >=0.46.2
 #   (kanıt: 2026-09-16 trivy docker-security gate bulgusu → yama → 0 bulgu)
+#   KASITLI EKSENMEYEN: pip floor'u (2026-10-27, PR #54 taraması gerekçesi):
+#     pip >=26.1.2 kendi CVE'lerini kapatır ama pip'in son sürümü 26.2.2
+#     vendor SBOM'unda (pip/_vendor: msgpack 1.1.2, urllib3 2.7.0,
+#     setuptools 70.3.0) kapı setinde 4 HIGH taşıyor — kapı sürümü trivy
+#     0.69.3 ile rc=1 olarak ölçüldü, daha yeni pip yok. pip 24.0'ın KENDİ
+#     CVE'leri ise MEDIUM/LOW → kapı setine (CRITICAL,HIGH) girmez. Yani
+#     floor ekmemek kapıya zarar vermez; eklemek kapıyı kırar. Kayıt:
+#     docs/DOCKER_SECURITY_PATCHING.md (CVE-defteri altı not).
 # Floor'lar minimumdur (>=): base image daha yenisini taşıyorsa pip onu kullanır.
 ARG PYTHON_SECURITY_PATCH_PACKAGES="setuptools>=80 wheel>=0.46.2"
 
@@ -106,9 +114,17 @@ RUN set -eux; \
 #     audit_live_ci_sync 2 gündür repo-geneli kırmızı; u2'ye taşındı.
 #     DERS: tam-sürüm pin'ler upstream güvenlik-sürümü yayınında çöker —
 #     pin rotasyonu defter + sözleşme testiyle birlikte güncellenir).
+#   libssl3 + openssl: aynı kaynak paket iki adla taranıyor (ikisi de
+#     floor'lanır) — CVE-2026-42767, CVE-2026-54874, CVE-2026-63072,
+#     CVE-2026-63074, CVE-2026-63076, CVE-2026-75803
+#     → floor 3.0.22-1~deb12u2 (kanıt: 2026-10-27, kurulu 3.0.20-1~deb12u2;
+#     aday `apt-cache policy`, bookworm-security).
+#   tzdata: DLA-4792-1 (2026b → düzeltme 2026c-0+deb12u1) → floor
+#     2026e-0+deb12u1; severity UNKNOWN — kapı seti seviye-bilinmeyen
+#     sonucu da fail-closed bloklar.
 #     Girdi SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt,
 #     her build'de taze yama.
-ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2"
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2 libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 tzdata=2026e-0+deb12u1"
 RUN set -eux; \
     if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \
