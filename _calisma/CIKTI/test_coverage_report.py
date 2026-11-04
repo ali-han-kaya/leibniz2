@@ -290,6 +290,7 @@ HOOK_COVERAGE = {
         "test_check_id_residual_doc_sync.py",
         "test_mutation_battery_canonical.py",
         "test_r4_cron_evidence.py",
+        "test_preview_server_drain_subprocess.py",
     ],
 }
 
