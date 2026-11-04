@@ -212,18 +212,21 @@ def _write(path, records):
 
 
 def _upsert(path, record):
-    """Aynı (date, platform) kaydı varsa DEĞİŞTİRİR/dedup eder, yoksa ekler.
+    """Aynı (date, platform, family) kaydı varsa DEĞİŞTİRİR/dedup eder, yoksa ekler.
 
-    Kayıt kimliği `(date, platform)`'dur: aynı gün + platform için ikinci bir
-    satır yazmak yerine o satır güncellenir (idempotent --update). Anahtarın
-    tarihsel KOPYALARI (aynı gün+platform birden çok satır) tek satıra iner;
-    ilk eşleşmenin sırası korunur, yeni anahtar sona eklenir.
+    Kayıt kimliği `(date, platform, family)`'dir: aynı gün + platform + aile
+    için ikinci bir satır yazmak yerine o satır güncellenir (idempotent
+    --update). Anahtarın tarihsel KOPYALARI tek satıra iner; ilk eşleşmenin
+    sırası korunur, yeni anahtar sona eklenir. `family` kimliğe dahildir:
+    aynı gün canvas ve manuscript iki bağımsız seridir, biri diğerini EZMEZ.
     Döndürür: "updated" ya da "added".
     """
-    key = (str(record.get("date")), str(record.get("platform")))
+    key = (str(record.get("date")), str(record.get("platform")),
+           family_of(record))
     kept, action, placed = [], "added", False
     for existing in _records(path):
-        ekey = (str(existing.get("date")), str(existing.get("platform")))
+        ekey = (str(existing.get("date")), str(existing.get("platform")),
+                family_of(existing))
         if ekey == key:
             if not placed:  # ilk eşleşme → yeni kayıt bu sırada yer alır
                 kept.append(record)

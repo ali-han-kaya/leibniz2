@@ -525,7 +525,8 @@ class TestUpsertDedup(unittest.TestCase):
             self.assertEqual(len(rdt._records(p)), 2)
 
     def test_upsert_distinguishes_platform(self):
-        # Aynı gün, farklı platform → AYRI satır (kimlik (date, platform)).
+        # Aynı gün, farklı platform → AYRI satır (kimlik (date, platform,
+        # family)).
         with tempfile.TemporaryDirectory() as td:
             p = os.path.join(td, "trend.jsonl")
             rdt._write(p, [_rec(date="2026-09-18", platform="darwin")])
@@ -573,6 +574,26 @@ class TestUpsertDedup(unittest.TestCase):
             rdt._upsert(p, rec)
             rdt._upsert(p, rec)
             self.assertEqual(len(rdt._records(p)), 1)
+
+    def test_upsert_keeps_other_family_same_day(self):
+        # Aynı gün + platform, farklı aile → AYRI seriler; biri diğerini ezmez.
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "trend.jsonl")
+            ms = _rec(date="2026-09-18", platform="linux")
+            canvas = _crec(date="2026-09-18", platform="linux")
+            rdt._write(p, [ms, canvas])
+            action = rdt._upsert(
+                p, _rec(date="2026-09-18", platform="linux",
+                        tectonic_canonical_sha256="e" * 64))
+            self.assertEqual(action, "updated")
+            recs = rdt._records(p)
+            self.assertEqual(len(recs), 2)
+            self.assertEqual({rdt.family_of(r) for r in recs},
+                             {"manuscript", "canvas"})
+            self.assertEqual(recs[0]["tectonic_canonical_sha256"], "e" * 64)
+            canvas_row = next(r for r in recs if rdt.family_of(r) == "canvas")
+            self.assertEqual(canvas_row["tectonic_canonical_sha256"],
+                             canvas["tectonic_canonical_sha256"])
 
     def test_write_roundtrip(self):
         with tempfile.TemporaryDirectory() as td:
