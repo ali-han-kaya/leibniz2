@@ -158,6 +158,45 @@ jobs:
           fi
           echo "Onaylanan kosum: $approved"
 
+      # ── KIRMIZI DÖNGÜSÜNÜ KAPAT ────────────────────────────────────────
+      # Squash-merge + heal sırası yapısal bir kırmızı üretir: PR merge'i dal
+      # commit'ini düşürür, o push'un verify koşumu ölü hash görür (ölçüldü:
+      # 9d6589e0 kırmızı). Heal bot'u temiz ağacı main'e indirir ama
+      # GITHUB_TOKEN ile yapılan merge yeni koşum TETİKLEMEZ → main "son
+      # koşum kırmızı" durumunda kalır (ölçüldü: 156cc808 temiz, koşumsuz).
+      # Bu adım döngüyü kapatır: heal merge'ini bekler, sonra temiz main
+      # başında verify'i yeniden tetikler. Zaten yeşilse dispatch etmez.
+      - name: Re-verify clean main (close the red loop)
+        if: always() && steps.probe.outputs.rc != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAL_BRANCH: chore/changelog-heal
+          PROBE_RC: ${{ steps.probe.outputs.rc }}
+        run: |
+          set -euo pipefail
+          if [ "$PROBE_RC" = "1" ]; then
+            # Heal PR'ı auto-merge kuyruğunda; merge'i bekle (en çok 5 dk).
+            merged=0
+            for _ in $(seq 1 30); do
+              state=$(gh pr view "$HEAL_BRANCH" --json state --jq .state 2>/dev/null || echo "")
+              if [ "$state" = "MERGED" ]; then merged=1; break; fi
+              sleep 10
+            done
+            if [ "$merged" -ne 1 ]; then
+              echo "NOT: heal PR'ı 5 dk içinde merge olmadı — verify tetiklenmedi (merge sonrası elle: gh workflow run verify.yml --ref main)"
+              exit 0
+            fi
+          fi
+          HEAD_SHA=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          last=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/verify.yml/runs?branch=main&per_page=20" \
+                 --jq "[.workflow_runs[] | select(.head_sha==\"$HEAD_SHA\")][0].conclusion // \"none\"")
+          if [ "$last" = "success" ]; then
+            echo "PASS: main $HEAD_SHA için verify zaten yeşil"
+            exit 0
+          fi
+          gh workflow run verify.yml --ref main
+          echo "verify.yml dispatch edildi (main $HEAD_SHA, önceki sonuç: $last)"
+
       - name: Summary
         if: always()
         run: |
@@ -166,4 +205,5 @@ jobs:
             echo ""
             echo "- ölçüm exit: \`${{ steps.probe.outputs.rc }}\`"
             echo "- 0 = temiz · 1 = ölü ve/veya eksik satır bulundu (prune/append + bot PR) · 2 = ölçülemedi (kırmızı)"
+            echo "- döngü kapatma: heal merge'i sonrası temiz main başında verify yeniden tetiklenir"
           } >> "$GITHUB_STEP_SUMMARY"
