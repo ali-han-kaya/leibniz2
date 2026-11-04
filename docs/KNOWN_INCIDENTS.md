@@ -313,3 +313,58 @@ Etki: `required` bir iş iptal edildiğinde artık `verdict: blocking` çıkıyo
 - Koşum `failure`/`cancelled` iken `verdict: clean | zorunlu 0 | advisory 0`
 - Tabloda satır sayısı ile `jobs` API'sindeki kırmızı iş sayısı farklı
 - `conclusion == "…"` kalıbıyla yazılmış herhangi bir iş süzgeci
+---
+
+## INC-7: 17 açık PR birikmesi — otomatik güncelleme yokluğu
+
+**Tarih:** 2026-11-04
+**Etkilenen PR'lar:** #144 #145 #148 #149 #172 #173 #177 #178 #179 #180
+#181 #183 #185 #187 #190 (ayrıca kapatılan #131 ve #171)
+**Düzeltme:** PR #192 (squash: `6612975b`) + `.github/workflows/pr-hygiene.yml`
+**Durum:** ✅ Çözüldü — açık PR 0, hijyen botu ilk canlı koşumda doğrulandı
+
+### Belirti
+
+Board'da aynı anda 17 açık PR vardı; main ilerledikçe hiçbiri güncellenmediği
+için çoğu **BEHIND** ya da **DIRTY** durumdaydı. Her PR tek tek çakışma
+çözümü bekliyordu; "PR aç → unut → main ilerlesin" döngüsü kalıcı hale
+gelmişti.
+
+### Kök neden
+
+Otomasyon eksikliği, kod hatası değil:
+
+- `main`'e merge oldukça açık PR'ların dalları eskiyor, fakat hiçbir aktör
+  `gh pr update-branch` çağırmıyordu.
+- Board'u ölçen tek bir yer yoktu: kaç PR'ın BEHIND/DIRTY/bayat olduğu
+  ancak elle `gh pr list` ile görülüyordu.
+- Birikim eşiği aşıldığında görünür bir sinyal (issue/kırmızı koşum) yoktu.
+
+### Çözüm
+
+1. **Tek entegrasyon dalı (PR #192):** 15 dal sırayla `origin/main` üzerine
+   merge edildi; çakışmalar sözleşme bazında çözüldü (required set 18,
+   `PUBLISH_SCENARIO` job tablosu, jobs-map diyagramı, determinism trend
+   dedup+upsert, docker floor'ları, pre-commit/gitignore birleşimi, R4
+   kanıtı). Doğrulama: tüm `_calisma/CIKTI/test_*.py` bataryası yerelde
+   yeşil, `verify_delivery.py --dir _calisma/CIKTI` PASS (P0=0, P1=0).
+2. **`pr-hygiene` workflow'u:** her `main` push'unda (ve `workflow_dispatch`)
+   board'u ölçer; yalnız BEHIND + taslak-değil + `hold` etiketsiz PR'ları
+   rebase eder (en fazla 5); eşik (8) aşılırsa tek izleme issue'su açar,
+   board temizse kapatır. `gh` hatasında rc 2, eşik aşımında rc 3 = kırmızı.
+
+### Canlı kanıt (aynı gün)
+
+| Koşum | Durum | Sonuç |
+|---|---|---|
+| İlk `pr-hygiene` (16 açık PR) | failure (rc 3) | `PILEUP: 16 açık PR > eşik 8`; issue #194 açıldı |
+| Temizlik sonrası `workflow_dispatch` | success | `OK: 1 açık PR (eşik 8)`; issue #194 kapatıldı |
+
+### Önlem
+
+- Bir PR açıldığında "main ilerledikçe kim güncelleyecek?" sorusunun cevabı
+  artık bottur; `/hold` etiketi otomatik rebase'den muafiyettir.
+- DIRTY PR'lar otomatik rebase **edilmez** — gerçek çakışma insan kararıdır;
+  bot yalnız bayatlığı önler.
+- Eşik aşımı sessiz geçmez: kırmızı koşum + issue, "birikim normal" algısını
+  kırar.
