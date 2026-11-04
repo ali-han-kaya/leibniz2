@@ -18,6 +18,9 @@ record_determinism_trend.py sözleşmelerini OFFLINE sabitler:
      boyayamaz (fail-open regresyon testi); her iki aile de trendde bulunmalı;
      şema-dışı `family` değeri kırmızıdır. Canvas modu yalnız apex (kitap)
      kaynağını kabul eder ve aile SDE sabitini (1700000000) zorlar.
+  6) GERÇEK DEFTER TEKİLLİĞİ: kayıt kimliği (date, platform, family);
+     aynı anahtarın ikinci satırı kopyadır — gerçek dosyada
+     fail-closed kapı (dosya yok/boş/bozuk = FAIL, SKIP değil).
 
 Tarihler cutoff'tan (2026-09-17) SONRA seçilir ki yalnız hedeflenen
 değişmez ihlal edilsin (izole senaryolar). stdlib-only, OFFLINE.
@@ -510,6 +513,66 @@ class TestCanvasContractAcrossArtifacts(unittest.TestCase):
         self.assertTrue(os.path.exists(rdt.CANVAS_APEX_TEX))
         self.assertEqual(os.path.basename(rdt.CANVAS_APEX_TEX),
                          rdt.CANVAS_APEX_STEM + ".tex")
+
+
+class TestRealTrendDataUniqueKeys(unittest.TestCase):
+    """Gerçek trend defterinde kayıt kimliği tekilliği — fail-closed kapı.
+
+    Kayıt kimliği `(date, platform, family)`'dir; `family` yoksa manuscript
+    (şema genişlemesinin geriye dönük okuması). Aynı anahtarın ikinci satırı
+    kopyadır. Kapı GERÇEK dosyayı okur: dosya yoksa, boşsa ya da JSONL
+    bozuksa SKIP değil FAIL — sessizce açık kalan kapı kopyaları sonraki
+    haftaya taşır.
+    """
+
+    @staticmethod
+    def _duplicates(rows):
+        """[(ilk_satır, kopya_satır, anahtar)] — dosya sırasıyla."""
+        seen, dupes = {}, []
+        for lineno, rec in enumerate(rows, 1):
+            key = (str(rec.get("date")), str(rec.get("platform")),
+                   rdt.family_of(rec))
+            if key in seen:
+                dupes.append((seen[key], lineno, key))
+            else:
+                seen[key] = lineno
+        return dupes
+
+    def test_detection_flags_duplicate_key(self):
+        rows = [_rec(date="2026-09-23", platform="linux"),
+                _rec(date="2026-09-23", platform="linux")]
+        self.assertEqual(
+            self._duplicates(rows),
+            [(1, 2, ("2026-09-23", "linux", "manuscript"))])
+
+    def test_detection_treats_missing_family_as_manuscript(self):
+        legacy = _rec(date="2026-09-23", platform="linux")
+        explicit = _rec(date="2026-09-23", platform="linux",
+                        family="manuscript")
+        self.assertEqual(len(self._duplicates([legacy, explicit])), 1)
+
+    def test_detection_allows_same_day_per_family(self):
+        rows = [_rec(date="2026-10-12", platform="linux"),
+                _crec(date="2026-10-12", platform="linux")]
+        self.assertEqual(self._duplicates(rows), [])
+
+    def test_real_trend_file_has_no_duplicate_record_keys(self):
+        path = rdt.TREND
+        # `_records` var olmayan dosyada [] döner; kapı bunu PASS sayamaz.
+        self.assertTrue(os.path.isfile(path),
+                        "gerçek trend defteri yok (fail-closed): %s" % path)
+        try:
+            rows = rdt._records(path)
+        except (OSError, ValueError) as exc:
+            self.fail("gerçek trend defteri okunamadı (fail-closed): %s" % exc)
+        self.assertTrue(rows,
+                        "gerçek trend defteri boş (fail-closed): %s" % path)
+        dupes = self._duplicates(rows)
+        self.assertEqual(
+            dupes, [],
+            "yinelenen (date, platform, family) anahtarı: %s — her anahtar "
+            "tek satır olmalı; --update upsert ile yazar"
+            % ", ".join("satır %s/%s %r" % (a, b, k) for a, b, k in dupes))
 
 
 if __name__ == "__main__":
