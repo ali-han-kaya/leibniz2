@@ -720,6 +720,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-10-02 | feat | (ci) haftalik trend kosumunda svg/json artifacti yayimla | [`e16566b3`](https://github.com/ali-han-kaya/leibniz2/commit/e16566b3) |
 | 2026-10-02 | feat | (trend) kayıt katmanına aynı-gün platform dedup (upsert) | [`8e50cece`](https://github.com/ali-han-kaya/leibniz2/commit/8e50cece) |
 | 2026-11-04 | docs | (ci) job tablosunu 18'lik required sözleşmesiyle ve R4 kanıtını hizala | [`55ae554c`](https://github.com/ali-han-kaya/leibniz2/commit/55ae554c) |
+| 2026-11-04 | docs | (map) job haritasını iki workflow'un ortak required sözleşmesine genişlet | [`75308975`](https://github.com/ali-han-kaya/leibniz2/commit/75308975) |
 
 ### Regresyon notları
 
