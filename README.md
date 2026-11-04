@@ -705,7 +705,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-04 | docs | (deploy) 5c7ec4e9 kanit satirini ekle, gap 4'ten 0'a | [`d93226d3`](https://github.com/ali-han-kaya/leibniz2/commit/d93226d3) |
 | 2026-11-04 | docs | (deploy) 5c7ec4e9 kanit satirini ekle, gap 4'ten 0'a | [`d93226d`](https://github.com/ali-han-kaya/leibniz2/commit/d93226d) |
 | 2026-11-04 | chore | (ci) 15 açık PR'ı tek entegrasyon dalında birleştir (#192) | [`6612975`](https://github.com/ali-han-kaya/leibniz2/commit/6612975) |
-| 2026-11-04 | docs | (incidents) PR birikimi olayını ve hijyen botunu kaydet | [`a04c23c6`](https://github.com/ali-han-kaya/leibniz2/commit/a04c23c6) |
+| 2026-11-04 | docs | (incidents) PR birikimi olayını ve hijyen botunu kaydet (#195) | [`9d6589e`](https://github.com/ali-han-kaya/leibniz2/commit/9d6589e) |
 
 ### Regresyon notları
 
