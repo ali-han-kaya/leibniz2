@@ -47,7 +47,7 @@ jobs:
   heal:
     name: Heal dead changelog hashes (bot PR)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       # Reachability ölçümü tam geçmiş ister (origin/main ∪ HEAD).
       - name: Checkout (full history)
@@ -175,15 +175,17 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$PROBE_RC" = "1" ]; then
-            # Heal PR'ı auto-merge kuyruğunda; merge'i bekle (en çok 5 dk).
+            # Heal PR'ı auto-merge kuyruğunda; merge'i bekle (en çok 20 dk).
+            # 5 dk yetmiyordu: required check'ler (verify ~7 dk + docker)
+            # onay sonrası koşar; ölçüldü #198 → 5 dk doldu, PR BLOCKED kaldı.
             merged=0
-            for _ in $(seq 1 30); do
+            for _ in $(seq 1 60); do
               state=$(gh pr view "$HEAL_BRANCH" --json state --jq .state 2>/dev/null || echo "")
               if [ "$state" = "MERGED" ]; then merged=1; break; fi
-              sleep 10
+              sleep 20
             done
             if [ "$merged" -ne 1 ]; then
-              echo "NOT: heal PR'ı 5 dk içinde merge olmadı — verify tetiklenmedi (merge sonrası elle: gh workflow run verify.yml --ref main)"
+              echo "NOT: heal PR'ı 20 dk içinde merge olmadı — verify tetiklenmedi (merge sonrası elle: gh workflow run verify.yml --ref main)"
               exit 0
             fi
           fi
