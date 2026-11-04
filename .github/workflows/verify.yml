@@ -4161,7 +4161,7 @@ jobs:
   docx-export:
     name: Docx export (LibreOffice check, fail-closed)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -4195,11 +4195,18 @@ jobs:
 
       # writer-only: headless dönüşüm için tam masaüstü gerekmez. Kurulum
       # AÇIKtır — runner imajına güvenilmez; kurulum başarısızsa adım kırmızı.
-      - name: Install LibreOffice (writer only)
+      - name: Install LibreOffice (writer, no GUI)
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libreoffice-writer
+          # -nogui varyanti masaustu bagimliliklarini cekmez: tam
+          # `libreoffice-writer` 15 dk timeout'unu asiyordu (olculdu: job
+          # 19:12:32'de basladi, 19:27:52'de timeout'ta iptal edildi).
+          # Nogui paketi yoksa tam pakete dusulur; kurulum basarisizsa
+          # adim KIRMIZI (kurulumun kendisi kanit).
+          sudo apt-get install -y --no-install-recommends \
+            libreoffice-writer-nogui \
+            || sudo apt-get install -y --no-install-recommends libreoffice-writer
           command -v soffice || command -v libreoffice
 
       - name: LibreOffice check (opens + text witness)
