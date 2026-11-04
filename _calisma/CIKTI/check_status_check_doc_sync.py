@@ -201,7 +201,7 @@ LIST_SITES = (
 # hâlâ dosyada olduklarını denetler: gerekçe çürürse (metin değişir/kaybolur)
 # kapsam sessizce daralmış olmasın.
 EXCLUSIONS = (
-    {"file": PUBLISH, "anchor": "Web UI ile 12 required check",
+    {"file": PUBLISH, "anchor": "Web UI ile kuruldu (2026-08-18: 12 required check)",
      "reason": "2026-08-19 tarihli UYGULAMA kaydı — o gün kurulan korumanın "
                "sayısı; bugünkü gereken sayı değil. Canlı doğru: "
                "`status_checks.py --gh` (eksikse FAIL eder)"},
@@ -273,15 +273,39 @@ def derive(root=REPO):
     nonreq_pr_only = pr_only_ids - required_ids
     advisory_ids = set(jobs) - required_ids - pr_only_ids
     names = {jid: jobs[jid]["name"] for jid in jobs}
+    # İkincil workflow kapıları (docker-security) da required sözleşmesine
+    # girer: status_checks.expected_checks() tek kaynaktır. Doküman sayıları
+    # verify.yml ile sınırlı kalırsa required=16 beyanı 18'lik gerçeği
+    # gizler — bu yüzden total/advisory de ikincil job'larla genişler.
+    secondary_names = _secondary_gate_names(root)
+    required_names = sorted(list(names[jid] for jid in required_ids)
+                            + secondary_names)
+    total = len(jobs) + len(secondary_names)
     return {
-        "total": len(jobs),
-        "required": len(required_ids),
-        "advisory": len(advisory_ids),
+        "total": total,
+        "required": len(required_names),
+        "advisory": total - len(required_names) - len(nonreq_pr_only),
         "pr_only": len(nonreq_pr_only),
-        "required_names": sorted(names[jid] for jid in required_ids),
+        "required_names": required_names,
         "pr_only_ids": sorted(nonreq_pr_only),
         "pr_only_required_ids": sorted(pr_only_ids & required_ids),
     }
+
+
+def _secondary_gate_names(root):
+    """status_checks.secondary_gate_jobs() adları (docker-security vb.)."""
+    if pathlib.Path(root).resolve() == REPO.resolve():
+        jobs = sc.secondary_gate_jobs()
+    else:
+        saved = getattr(sc, "ROOT", None)
+        try:
+            if saved is not None:
+                sc.ROOT = pathlib.Path(root)
+            jobs = sc.secondary_gate_jobs()
+        finally:
+            if saved is not None:
+                sc.ROOT = saved
+    return [name for per_wf in jobs.values() for name in per_wf.values()]
 
 
 def _gate_job_ids(root):

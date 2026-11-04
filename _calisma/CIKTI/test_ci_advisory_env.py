@@ -383,12 +383,24 @@ class TestGatesMustRunInACleanCheckout(unittest.TestCase):
         self.assertIn("skipTest", sibling)
 
     def test_partially_provisioned_checkout_skips_instead_of_failing(self):
-        """Somut kanıt: unit'leri gizleyince SKIP, FAIL değil."""
+        """Somut kanıt: unit'leri gizleyince SKIP, FAIL değil.
+
+        ÖLÇÜLEN İKİNCİ OLAY (2026-10-26): test yalnız KURULMAMIŞ bir
+        checkout'ta geçiyordu. `REQUIRED` probe'ları sınıf tanımında
+        `os.path.isdir`/`isfile` NESNESİNİ saklar; `os.path.isdir`
+        niteliğini patch'lemek bu referansları değiştirmez. Provisioned
+        makinede (venv + node_modules var) probe'lar gerçek `True` dönüyor,
+        skip tetiklenmiyor ve test FAIL ediyordu — yani "kısmi kurulum"
+        senaryosunu yalnız zaten kısmi olan ortamda ölçebiliyordu.
+        Doğru yöntem probe'ları da gizlemek: REQUIRED'ın kendisini
+        `False` dönen probe'larla değiştir.
+        """
         mod = self._load()
         method = mod.TestCheckContract(
             "test_check_passes_on_provisioned_checkout")
-        with mock.patch.object(mod.os.path, "isdir", lambda p: False), \
-                mock.patch.object(mod.os.path, "isfile", lambda p: False):
+        hidden = tuple((name, path, (lambda _p: False))
+                       for name, path, _probe in mod.TestCheckContract.REQUIRED)
+        with mock.patch.object(mod.TestCheckContract, "REQUIRED", hidden):
             with self.assertRaises(unittest.SkipTest) as ctx:
                 method.test_check_passes_on_provisioned_checkout()
         self.assertIn("tam kurulum değil", str(ctx.exception))

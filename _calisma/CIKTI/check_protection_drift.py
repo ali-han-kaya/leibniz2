@@ -110,7 +110,7 @@ def build_alert_body(report, url=None):
                 str(f.get("check", "")).replace("|", "\\|"),
                 str(f.get("issue", "")).replace("|", "\\|"),
                 str(f.get("evidence", "")).replace("|", "\\|")))
-    lines += ["", "Beklenen ayarlar `status_checks.gate_jobs()` + "
+    lines += ["", "Beklenen ayarlar `status_checks.expected_checks()` + "
                   "`verify_delivery.check_protection_drift` sözleşmesidir; "
                   "düzeltme `_calisma/CIKTI/setup_branch_protection.py` ile "
                   "yapılır.", "",
@@ -282,7 +282,11 @@ def main(argv=None):
         _alert(payload)
         return 2
 
-    expected = list(sc.gate_jobs().values())
+    # `expected_checks()` — verify.yml kapıları + ikincil workflow kapıları
+    # (docker-security). Yalnız `gate_jobs()` kullanmak, required set 18'e
+    # çıktıktan sonra haftalık monitörü eski 16'lık kümeye sabitlerdi ve
+    # gerçek required check'ler "fazla" görünürdü.
+    expected = list(sc.expected_checks())
     findings = []
     ok, detail = vd.check_protection_drift(
         lambda pri, cid, check, issue, evidence="": findings.append(
