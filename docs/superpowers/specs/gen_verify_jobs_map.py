@@ -42,6 +42,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 
 WF = os.path.join(ROOT, ".github", "workflows", "verify.yml")
 PS = os.path.join(ROOT, "docs", "PUBLISH_SCENARIO.md")
+# Doc tablosu TÜM CI job'larını belgeler: required sözleşmesi verify.yml (16)
+# + docker-security.yml (2). Diyagram verify.yml DAG'idir; ikinci workflow'un
+# job'ları ayrı akış olduğu için kutu değil başlık notu olarak yer alır.
+WF_DOCKER = os.path.join(ROOT, ".github", "workflows", "docker-security.yml")
 OUT = os.path.join(ROOT, "docs", "superpowers", "specs",
                    "2026-09-24-verify-jobs-map.excalidraw")
 UPD = 1789588800000
@@ -159,8 +163,12 @@ class SyncError(Exception):
         self.lines = lines
 
 
-def load_sources(wf_path=WF, ps_path=PS):
-    """(wf, ps_text) — eksik dosya/PyYAML `MeasurementError` yükseltir."""
+def load_sources(wf_path=WF, ps_path=PS, docker_path=None):
+    """(wf, ps_text, docker_jobs) — eksik dosya/PyYAML `MeasurementError`.
+
+    `docker-security.yml` OPSİYONELDİR (sentetik test ağaçlarında yoktur);
+    varsa job adları doc senkron kümesine katılır.
+    """
     if yaml is None:
         raise MeasurementError(
             "PyYAML yok: verify.yml ayrıştırılamıyor (kapı fail-closed; "
@@ -180,7 +188,19 @@ def load_sources(wf_path=WF, ps_path=PS):
         raise MeasurementError("PUBLISH_SCENARIO.md okunamadı: %s" % exc)
     if not isinstance(wf, dict) or not isinstance(wf.get("jobs"), dict) or not wf["jobs"]:
         raise MeasurementError("verify.yml'de `jobs:` haritası yok/boş: %s" % wf_path)
-    return wf, ps_text
+    docker_jobs = {}
+    docker_path = docker_path or os.path.join(
+        os.path.dirname(wf_path), "docker-security.yml")
+    if os.path.exists(docker_path):
+        try:
+            with open(docker_path, encoding="utf-8") as fh:
+                docker_doc = yaml.safe_load(fh)
+        except (OSError, yaml.YAMLError) as exc:
+            raise MeasurementError(
+                "docker-security.yml okunamadı/ayrıştırılamadı: %s" % exc)
+        if isinstance(docker_doc, dict) and isinstance(docker_doc.get("jobs"), dict):
+            docker_jobs = docker_doc["jobs"]
+    return wf, ps_text, docker_jobs
 
 
 def build(wf_path=WF, ps_path=PS):
@@ -188,7 +208,7 @@ def build(wf_path=WF, ps_path=PS):
     elements.clear()
     _seed[0] = SEED0
 
-    wf, ps_text = load_sources(wf_path, ps_path)
+    wf, ps_text, docker_jobs = load_sources(wf_path, ps_path)
     jobs = wf["jobs"]
 
     # ── 1) kaynaklar ─────────────────────────────────────────────────────────
@@ -198,6 +218,7 @@ def build(wf_path=WF, ps_path=PS):
 
     # fail-closed senkron: workflow ↔ PUBLISH_SCENARIO
     wf_names = {j.get("name") for j in jobs.values()}
+    wf_names |= {j.get("name") for j in docker_jobs.values()}
     ps_names = set(cat_by_name)
     if wf_names != ps_names:
         raise SyncError([
@@ -248,17 +269,21 @@ def build(wf_path=WF, ps_path=PS):
 
     # ── 5) başlık + gösterge ─────────────────────────────────────────────────
     counts = {}
-    for name in cat_by_name.values():
-        counts[name] = counts.get(name, 0) + 1
+    # Yalnız DİYAGRAMDAKİ (verify.yml) job'lar sayılır; docker-security
+    # job'ları ayrı not olarak raporlanır ki başlık 32 job ile tutarlı kalsın.
+    for name in (j.get("name") for j in jobs.values()):
+        counts[cat_by_name[name]] = counts.get(cat_by_name[name], 0) + 1
     elements.insert(0, text(
         "verify.yml · Job İlişki Haritası (needs-DAG) — %d job" % len(jobs),
         X0, 20, 760, 36, size=28))
-    elements.insert(1, text(
-        "ok → needs (bağımlılık) · renk = PUBLISH_SCENARIO kategorisi · "
-        "%d A (gerekli) + %d B (advisory) + %d C (PR-only) + %d D (PR comment)"
-        % (counts.get("A", 0), counts.get("B", 0), counts.get("C", 0),
-           counts.get("D", 0)),
-        X0, 64, 900, 20, size=15, color="#495057"))
+    note = ("ok → needs (bağımlılık) · renk = PUBLISH_SCENARIO kategorisi · "
+            "%d A (gerekli) + %d B (advisory) + %d C (PR-only) + %d D (PR comment)"
+            % (counts.get("A", 0), counts.get("B", 0), counts.get("C", 0),
+               counts.get("D", 0)))
+    if docker_jobs:
+        note += (" · + docker-security.yml: %d job (ayrı workflow, aynı "
+                 "required sözleşmesi)" % len(docker_jobs))
+    elements.insert(1, text(note, X0, 64, 1200, 20, size=15, color="#495057"))
 
     ly = max_bottom + 30
     lx = X0
@@ -283,7 +308,7 @@ def build(wf_path=WF, ps_path=PS):
     n_arrows = sum(1 for e in elements if e["type"] == "arrow")
     stats = {
         "jobs": len(jobs), "layers": len(columns), "arrows": n_arrows,
-        "elements": len(elements),
+        "elements": len(elements), "docker_jobs": len(docker_jobs),
         "columns": {c: len(v) for c, v in sorted(columns.items())},
     }
     return doc, stats
