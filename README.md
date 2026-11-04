@@ -702,6 +702,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-01 | chore | (changelog) caeeba03 satirini tabloya ekle | [`8c50383`](https://github.com/ali-han-kaya/leibniz2/commit/8c50383) |
 | 2026-11-03 | test | (preview-server) drain için subprocess regresyon testi | [`549ace0`](https://github.com/ali-han-kaya/leibniz2/commit/549ace0) |
 | 2026-11-03 | docs | (deploy) [bot] R4 cron kanıt parçası (schedule tick) | [`8000d9b`](https://github.com/ali-han-kaya/leibniz2/commit/8000d9b) |
+| 2026-11-02 | fix | (precommit) check-status-check-doc-sync hook anahtarlarını tamamla | [`8b2c0b0b`](https://github.com/ali-han-kaya/leibniz2/commit/8b2c0b0b) |
 
 ### Regresyon notları
 
