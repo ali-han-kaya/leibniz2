@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 """test_r4_cron_evidence.py — R4 cron-kanıtı bekçisinin sözleşmesi.
 
-Kök-neden (ölçüldü, 2026-10-31): R4 satırının en kritik iddiası — "GitHub'ın
-kendi `schedule` tetiklemesi oldu mu?" — birinin `gh run list` çağırmayı
-hatırlamasına bağlıydı. Satır "ilk ateşleme 2026-10-05" diyordu; dört
-Pazartesi geçti, `event=schedule` sayısı 0 kaldı ve hiçbir koşum kırmızıya
-dönmedi (tetiklenmeyen cron kırmızı bir koşum üretmez, yalnız sessizlik
-üretir). Bekçi (`.github/workflows/docker-security-cron-evidence.yml` +
+Kök-neden (ölçüldü, 2026-10-31; düzeltildi 2026-11-01): R4 satırının en
+kritik iddiası — "GitHub'ın kendi `schedule` tetiklemesi oldu mu?" — birinin
+`gh run list` çağırmayı hatırlamasına bağlıydı. İlk bekçi ölçümü son 100
+koşuma baktığı için haftalık cron koşumlarını pencerenin dışında bıraktı ve
+"schedule 0" ölçtü; gerçekte dört koşum vardı (2026-10-05 failure, 10-12
+success, 10-19 success, 10-26 failure). Ölçüm artık `--event schedule` ile
+sunucu tarafında filtrelenir — koşum hacmi kanıtı gizleyemez. Bekçi (`.github/workflows/docker-security-cron-evidence.yml` +
 `r4_cron_evidence.py`) o sessizliği ölçülebilir hâle getirir ve kanıtı R4
 satırına yazar.
 
@@ -564,6 +565,36 @@ class TestWorkflowContract(unittest.TestCase):
         mine = [f for f in findings if WORKFLOW.name in f]
         self.assertEqual(mine, [], "CI hijyen kapısı bekçi workflow'unda "
                                    "ihlal buldu: %s" % mine)
+
+
+class TestFetchWindow(unittest.TestCase):
+    """K7 PENCERE: ölçüm `event=schedule` ile sunucu tarafında filtrelenir.
+
+    Regresyon (2026-11-01): filtre yokken `gh run list --limit 100` bu repoda
+    ~9 günde ~500 push/PR koşumunun altında kalan dört `schedule` koşumunu
+    göremedi; bekçi "schedule 0" ölçüp yanlışlıkla `missed` hükmü yazdı.
+    """
+
+    def test_fetch_asks_github_for_schedule_runs_only(self):
+        import audit_live_ci_sync as alcs
+        captured = {}
+
+        def fake_run_gh(argv):
+            captured["argv"] = list(argv)
+            return json.dumps([gh_item(4242, AFTER_TICK)])
+
+        original = alcs.run_gh
+        alcs.run_gh = fake_run_gh
+        try:
+            runs = r4.fetch_runs("o/r")
+        finally:
+            alcs.run_gh = original
+        self.assertEqual([r.id for r in runs], ["4242"])
+        argv = captured["argv"]
+        self.assertIn("--event", argv,
+                      "ölçüm event filtresi olmadan push/PR hacmine yenik düşer")
+        self.assertEqual(argv[argv.index("--event") + 1], "schedule")
+        self.assertIn("--repo", argv)
 
 
 if __name__ == "__main__":
