@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover — PyYAML'sız ortam (dürüstçe SKIP)
 
 DOC = pathlib.Path("docs/PUBLISH_SCENARIO.md")
 WORKFLOW = pathlib.Path(".github/workflows/verify.yml")
+DOCKER_WORKFLOW = pathlib.Path(".github/workflows/docker-security.yml")
 
 # `**Job kategorileri (22 job = 12 required + 8 advisory + 2 PR-only):**`
 _HEADER_RE = re.compile(r"^\*\*Job kategorileri\s*\((\d+)\s+job", re.M)
@@ -86,8 +87,13 @@ class TestDocJobSync(unittest.TestCase):
             raise unittest.SkipTest(
                 f"repo kökünden koşulmalı ({DOC}/{WORKFLOW} yok)")
         cls.doc_rows = parse_doc_jobs(DOC.read_text(encoding="utf-8"))
-        cls.wf_names = set(
+        # Doc, CI'ın koştuğu TÜM job'ları belgeler: required sözleşmesi
+        # verify.yml (16) + docker-security.yml (2) = 18'dir.
+        names = set(
             workflow_job_names(WORKFLOW.read_text(encoding="utf-8")).values())
+        names |= set(workflow_job_names(
+            DOCKER_WORKFLOW.read_text(encoding="utf-8")).values())
+        cls.wf_names = names
 
     def test_doc_has_job_table(self):
         self.assertTrue(self.doc_rows, "doc'ta job tablosu yok "
