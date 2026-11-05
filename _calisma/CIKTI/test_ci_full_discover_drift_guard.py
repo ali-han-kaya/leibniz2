@@ -113,8 +113,11 @@ class TestWiring(unittest.TestCase):
 class TestBatteryInvocationContract(unittest.TestCase):
     """W4: batarya ölçümü modül/ortam sözleşmesi (fail-open regresyonu)."""
 
-    def _run_main(self, per_file_rc=0, files=("test_a.py", "test_b.py")):
+    def _run_main(self, per_file_rc=0, discover_rc=None,
+                  files=("test_a.py", "test_b.py")):
         import ci_full_discover_drift_guard as g
+        if discover_rc is None:
+            discover_rc = per_file_rc
 
         calls = []
         err = io.StringIO()
@@ -128,7 +131,7 @@ class TestBatteryInvocationContract(unittest.TestCase):
         def fake_run(cmd, **kw):
             calls.append((list(cmd), kw))
             if "discover" in cmd:
-                return _Result(per_file_rc, "Ran 7 tests in 0.01s")
+                return _Result(discover_rc, "Ran 7 tests in 0.01s")
             return _Result(per_file_rc, "Ran 1 test in 0.01s")
 
         with tempfile.TemporaryDirectory() as td:
@@ -168,6 +171,18 @@ class TestBatteryInvocationContract(unittest.TestCase):
         self.assertTrue(summary["registered_battery"]["green"])
         self.assertEqual(summary["registered_battery"]["files_passed"], 2)
         self.assertEqual(summary["registered_battery"]["files_failed"], [])
+
+    def test_drift_battery_green_discover_red_fails_closed(self):
+        # Kapının TEK karar noktası: kayıtlı batarya YEŞİL + full discover
+        # KIRMIZI → drift → rc=1. Mutasyon kanıtı: bu karar satırı fail-open'a
+        # çevrilirse (`return 1` → `return 0`) kapı sessizce yeşil kalır ve bu
+        # test kırmızı düşer (ölçüldü, aşağıdaki PR/commit kaydı).
+        rc, _, summary, err = self._run_main(per_file_rc=0, discover_rc=1)
+        self.assertEqual(rc, 1, "drift varken guard exit 0 dönemez (fail-open)")
+        self.assertTrue(summary["drift_detected"])
+        self.assertEqual(summary["verdict"], "FAIL")
+        self.assertIn("CI-FULL-DISCOVER-DRIFT-GUARD: FAIL", err)
+        self.assertIn("kayıtlı batarya: GREEN (2/2 passed)", err)
 
     def test_red_battery_keeps_gate_from_silently_failing(self):
         # Batarya kırmızıyken gate FAIL hükme varamaz (drift tanımı batarya

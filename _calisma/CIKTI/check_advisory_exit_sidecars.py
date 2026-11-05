@@ -71,6 +71,17 @@ SIDECARS = (
         "path": "logs/check_unit_tests.exit",
         "step": "Run check-unit-tests hook (separate)",
     },
+    {
+        # FAIL-CLOSED yazıcı (`continue-on-error` YOK): verdict dosyaya
+        # yazıldıktan sonra `exit $status` ile job'a taşınır. Yine de dosya
+        # kayıtlı olmalı — yazıcı sessizce silinemez/başka adıma kaydırılamaz.
+        # Statik mod bu sınıfta advisory olma şartı ARAMAZ; onun yerine
+        # `continue-on-error` bulunmamasını ve `if: always()` koşulunu ister.
+        "name": "full_discover_drift_guard",
+        "path": "logs/full_discover_drift_guard.exit",
+        "step": "Full-discover drift guard (fail-closed)",
+        "fail_closed": True,
+    },
 )
 
 # `... > logs/x.exit` / `> "logs/x.exit"` biçimindeki yazımlar.
@@ -116,6 +127,28 @@ def is_advisory(step: dict) -> bool:
     cond = step.get("if")
     always = isinstance(cond, str) and "always()" in cond
     return truthy and always
+
+
+def fail_closed_writer_problems(step: dict) -> list:
+    """Fail-closed yazıcı sözleşmesi: advisory DEĞİL, ama kanıtı kaçırmaz.
+
+    Bu sınıftaki adım `exit $status` ile job'ı düşürdüğü için verdict
+    sessizce kaybolamaz; yine de `if: always()` olmalı (önceki adım düşse de
+    sidecar yazılmalı) ve `continue-on-error` ile advisory'e düşürülmemeli.
+    """
+    problems = []
+    if step.get("continue-on-error"):
+        problems.append(
+            "fail-closed yazıcı advisory'e düşürülmüş (continue-on-error) — "
+            "verdict job'a taşınmaz"
+        )
+    cond = step.get("if")
+    if not (isinstance(cond, str) and "always()" in cond):
+        problems.append(
+            "fail-closed yazıcı `if: always()` olmalı — önceki adım düşerse "
+            "sidecar yazılmadan adım atlanır"
+        )
+    return problems
 
 
 def load_workflow(path: Path):
@@ -192,7 +225,9 @@ def check_static(path: Path, registry, findings, known_paths=None):
                 "errexit-güvensiz yazıcı (set +e/if-else yok) — komut düşerse "
                 "sidecar yazılmadan adım ölür"
             )
-        if not is_advisory(step):
+        if entry.get("fail_closed"):
+            problems.extend(fail_closed_writer_problems(step))
+        elif not is_advisory(step):
             problems.append("adım advisory değil (continue-on-error + if: always())")
         if entry["step"] != step_name:
             problems.append(

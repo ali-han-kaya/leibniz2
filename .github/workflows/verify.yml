@@ -662,6 +662,25 @@ jobs:
           cat logs/check_unit_tests.log
           exit $status
 
+      # ─── ADVISORY EXIT SIDECAR BÜTÜNLÜĞÜ (FAIL-CLOSED) ──────────────────
+      # YUKARIDAKİ dört advisory adım (precommit, K13, K12, check_unit_tests)
+      # kararlarını `logs/*.exit` sidecar'ına yazar. `continue-on-error: true`
+      # oldukları için, errexit `status=$?` satırını yutarsa (ya da adım
+      # çöker/atlanırsa) job YEŞİL kalır ve verdict sessizce kaybolur —
+      # bu depoda ölçülmüş gerçek olay (logs/precommit.exit yoktu, K12/K13
+      # vardı). Bu adım o sınıfı kapatır: `continue-on-error` YOK, yani
+      # eksik/boş/ayrıştırılamaz sidecar job'u KIRMIZI yapar. Statik mod da
+      # aynı koşumda doğrulanır: her kayıtlı sidecar'ın TAM BİR yazıcı adımı
+      # olmalı ve yazıcı errexit-güvenli olmalı (`set +e` / `if-else`).
+      # `if: always()`: önceki adımlar düşse de kanıt toplanır.
+      - name: Verify advisory exit sidecars (fail-closed)
+        if: always()
+        shell: bash
+        run: |
+          python3 _calisma/CIKTI/check_advisory_exit_sidecars.py \
+            --dir logs \
+            --workflow .github/workflows/verify.yml \
+            --json-out logs/advisory_sidecars.json
 
       # ─── COMMIT-MSG (ADVISORY) — commit geçmişi kural denetimi ──────────
       # commit_msg_hook.sh yerelde `git commit`'i BLOKE eder; CI'da zaten push
