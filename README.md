@@ -717,6 +717,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-05 | ci | (verify) full-discover drift guard'i fail-closed adim olarak bagla (#213) | [`df018ab`](https://github.com/ali-han-kaya/leibniz2/commit/df018ab) |
 | 2026-11-05 | ci | (trend) embed the weekly svg evidence in the PR body/comment (#216) | [`e1b4313b`](https://github.com/ali-han-kaya/leibniz2/commit/e1b4313b) |
 | 2026-11-05 | docs | (deploy) record dad180b3 push run evidence (#219) | [`12b78b9`](https://github.com/ali-han-kaya/leibniz2/commit/12b78b9) |
+| 2026-11-05 | docs | (deploy) record 590be2e5 dispatch evidence (#220) | [`0110c2a`](https://github.com/ali-han-kaya/leibniz2/commit/0110c2a) |
 
 ### Regresyon notları
 
