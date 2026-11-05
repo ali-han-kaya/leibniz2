@@ -38,7 +38,7 @@ repository, including but not limited to:
   - Configuration and manifest files that describe academic content
 
 Code (scripts, CI pipelines, test suites, automation) remains under the MIT
-License (see LICENSE-MIT).
+License (see LICENSE).
 
 When both licenses apply to a file (e.g., a script that generates academic
 content), the more restrictive license (CC-BY-4.0) takes precedence for the
