@@ -421,3 +421,16 @@ merge'ünden sonraki ilk tam koşum), `docker-security` #41901633551, `test-smok
 (#41435252478, 2026-11-02 success; `headSha=85da7690`).
 | 2026-11-04 | c8a5c63a | [success #41901633555](https://github.com/ali-han-kaya/leibniz2/actions/runs/41901633555) | [success #41901633551](https://github.com/ali-han-kaya/leibniz2/actions/runs/41901633551) | [success #41901585410](https://github.com/ali-han-kaya/leibniz2/actions/runs/41901585410) | [success #41435252478](https://github.com/ali-han-kaya/leibniz2/actions/runs/41435252478) |
 | 2026-11-05 | dad180b3 | [success #41951679205](https://github.com/ali-han-kaya/leibniz2/actions/runs/41951679205) | [success #41951679171](https://github.com/ali-han-kaya/leibniz2/actions/runs/41951679171) | [success #41951679217](https://github.com/ali-han-kaya/leibniz2/actions/runs/41951679217) | [success #41435252478](https://github.com/ali-han-kaya/leibniz2/actions/runs/41435252478) |
+| 2026-11-05 | 590be2e5 | [success #42108411933](https://github.com/ali-han-kaya/leibniz2/actions/runs/42108411933) | [success #42110985059](https://github.com/ali-han-kaya/leibniz2/actions/runs/42110985059) | [success #42110990215](https://github.com/ali-han-kaya/leibniz2/actions/runs/42110990215) | [success #41996055245](https://github.com/ali-han-kaya/leibniz2/actions/runs/41996055245) |
+
+`590be2e5` — PR #218 (`chore(changelog): [bot]`) merge'ü: `dad180b3`
+satırının üstüne `df018aba` ve `e1b4313b` anlamlı commit'leri geldi; ikisinin de
+push seti yeşil değildi (`df018aba` verify-delivery #41980292002 cancelled;
+`e1b4313b` verify-delivery #42091465172 ve docker-security #42091464995 failure).
+`590be2e5` bot merge'ü olduğu için `GITHUB_TOKEN` push'u workflow tetiklemedi;
+üç workflow aynı HEAD'de `workflow_dispatch` ile koştu ve success verdi:
+`verify-delivery` #42108411933, `docker-security` #42110985059 ve `test-smoke`
+#42110990215 (belgelenmiş manuel fallback). `determinism-trend` hücresi son
+ölçümü taşır (#41996055245, 2026-11-05, `headSha=cb9af4ae`, success).
+`substantive_gap(590be2e5, main)` = 0; satırı yazan commit `docs(deploy)` →
+`DEFAULT_GAP_EXEMPT`. Boşluk 2/3'ten 0/3'e indi.
