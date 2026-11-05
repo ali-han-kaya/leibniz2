@@ -37,6 +37,7 @@ test_check_mirror_coverage.py
 test_check_orchestration_stdin.py
 test_check_precommit_orphans.py
 test_check_prettier_format.py
+test_check_preview_mirror_stale.py
 test_check_protection_drift.py
 test_check_python3_shell.py
 test_check_repro_manifest_hook.py

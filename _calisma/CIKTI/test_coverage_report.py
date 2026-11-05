@@ -119,6 +119,7 @@ HOOK_COVERAGE = {
         "test_mirror_check.py",
         "test_mirror_panel.py",
         "test_check_mirror_coverage.py",
+        "test_check_preview_mirror_stale.py",
         "test_cleanup.py",
         "test_check_history.py",
         "test_preview_prestart.py",
