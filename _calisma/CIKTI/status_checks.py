@@ -151,6 +151,9 @@ GATE_EXCLUDE = {
     "lake-proof",            # ayrı-step K9 lake build (lean-toolchain v4.14.0);
                              #   GitHub required kontrollerinde DEĞİL (advisory) —
                              #   K9, verify job'unun --full içinde de koşar.
+    "docx-export",           # docx export (LibreOffice headless check) — reword-working
+                             #   dalından land; canlı protected sette YOK, required DEĞİL.
+                             #   Job kendi içinde fail-closed (verdict=PASS + motor yolu zorunlu).
 }
 # NOT (2026-10-25): `dashboard-smoke` ("Dashboard interaction E2E (node sandbox
 # + Chromium CDP)") EXCLUDE'dan ÇIKARILDI — canlı branch protection bu adı

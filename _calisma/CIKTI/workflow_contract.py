@@ -56,6 +56,7 @@ DOC_ONLY_ADVISORY = frozenset({
     "audit-live-ci",         # advisory meta-denetçi — job output
     "pattern-drift",         # advisory: merge pattern ↔ ARTIFACT_JOBS
     "preview-reload-smoke",  # advisory: preview reload smoke testi
+    "docx-report",           # advisory: docx export (LibreOffice) — merge bundle'a girmez
 })
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ DOC_ONLY_ADVISORY = frozenset({
 UPLOAD_EXCEPTIONS = frozenset({
     "badge-check",
     "action-pins",
+    "docx-report",
     "a11y-report-dark",
     "a11y-report-light",
     "a11y-guide-report-dark",
