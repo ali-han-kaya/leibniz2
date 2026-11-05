@@ -715,6 +715,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-05 | chore | (trend) TestUpsertDedup öncesi PEP8 boş satır onarımı | [`7497bf6`](https://github.com/ali-han-kaya/leibniz2/commit/7497bf6) |
 | 2026-11-05 | refactor | (coverage) AST test sayımı + betik bağı kapısı (#209) | [`dad180b`](https://github.com/ali-han-kaya/leibniz2/commit/dad180b) |
 | 2026-11-05 | ci | (verify) full-discover drift guard'i fail-closed adim olarak bagla (#213) | [`df018ab`](https://github.com/ali-han-kaya/leibniz2/commit/df018ab) |
+| 2026-11-05 | ci | (mirror) bayat mirror icin fail-closed probe kapisi | [`73fc7574`](https://github.com/ali-han-kaya/leibniz2/commit/73fc7574) |
 
 ### Regresyon notları
 
