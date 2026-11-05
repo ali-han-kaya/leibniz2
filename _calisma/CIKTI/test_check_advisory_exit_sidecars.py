@@ -57,7 +57,8 @@ class TestRuntimeMode(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             write_sidecars(tmp, {"precommit": "1", "k13_repro_manifest": "0",
                                  "k12_repro_manifest": "2",
-                                 "check_unit_tests": "0"})
+                                 "check_unit_tests": "0",
+                                 "full_discover_drift_guard": "0"})
             rc, out = run_gate(["--dir", tmp])
         self.assertEqual(rc, 0, out)
         self.assertIn("PASS", out)
@@ -65,7 +66,8 @@ class TestRuntimeMode(unittest.TestCase):
     def test_missing_sidecar_fails_and_names_the_lost_verdict(self):
         with tempfile.TemporaryDirectory() as tmp:
             write_sidecars(tmp, {"precommit": "0", "k13_repro_manifest": "0",
-                                 "k12_repro_manifest": "0"})
+                                 "k12_repro_manifest": "0",
+                                 "full_discover_drift_guard": "0"})
             rc, out = run_gate(["--dir", tmp, "--json"])
         payload = json.loads(out)
         self.assertEqual(rc, 1)
@@ -81,7 +83,8 @@ class TestRuntimeMode(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             write_sidecars(tmp, {"precommit": "", "k13_repro_manifest": "0",
                                  "k12_repro_manifest": "0",
-                                 "check_unit_tests": "0"})
+                                 "check_unit_tests": "0",
+                                 "full_discover_drift_guard": "0"})
             rc, out = run_gate(["--dir", tmp, "--json"])
         payload = json.loads(out)
         self.assertEqual(rc, 1)
@@ -93,7 +96,8 @@ class TestRuntimeMode(unittest.TestCase):
             write_sidecars(tmp, {"precommit": "Traceback (most recent call last)",
                                  "k13_repro_manifest": "0",
                                  "k12_repro_manifest": "0",
-                                 "check_unit_tests": "0"})
+                                 "check_unit_tests": "0",
+                                 "full_discover_drift_guard": "0"})
             rc, out = run_gate(["--dir", tmp, "--json"])
         payload = json.loads(out)
         self.assertEqual(rc, 1)
@@ -103,7 +107,8 @@ class TestRuntimeMode(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             write_sidecars(tmp, {"precommit": "999", "k13_repro_manifest": "0",
                                  "k12_repro_manifest": "0",
-                                 "check_unit_tests": "0"})
+                                 "check_unit_tests": "0",
+                                 "full_discover_drift_guard": "0"})
             rc, out = run_gate(["--dir", tmp, "--json"])
         self.assertEqual(rc, 1)
         self.assertEqual(json.loads(out)["invalid"], ["precommit"])
@@ -112,7 +117,8 @@ class TestRuntimeMode(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             write_sidecars(tmp, {"precommit": "0", "k13_repro_manifest": "0",
                                  "k12_repro_manifest": "0",
-                                 "check_unit_tests": "0"})
+                                 "check_unit_tests": "0",
+                                 "full_discover_drift_guard": "0"})
             report = pathlib.Path(tmp) / "reported" / "sidecars.json"
             rc, out = run_gate(["--dir", tmp, "--json-out", str(report)])
             self.assertEqual(rc, 0)
@@ -188,6 +194,55 @@ class TestStaticMode(unittest.TestCase):
             path = self._workflow(tmp, [{"name": "other", "run": "echo hi"}])
             findings, _ = self._findings_for(path, SAMPLE)
         self.assertEqual([f["kind"] for f in findings], ["no-writer"])
+
+    def test_fail_closed_writer_is_accepted(self):
+        # Fail-closed yazıcı (`continue-on-error` YOK) da kayıtlı olmalı ve
+        # kabul edilmeli: verdict `exit $status` ile job'a taşınır.
+        run = ("set +e\npython3 guard.py > logs/g.log 2>&1\nstatus=$?\n"
+               "set -e\necho \"$status\" > logs/full_discover_drift_guard.exit\n"
+               "exit $status\n")
+        entry = [{"name": "full_discover_drift_guard",
+                  "path": "logs/full_discover_drift_guard.exit",
+                  "step": "drift", "fail_closed": True}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._workflow(tmp, [{"name": "drift", "if": "always()",
+                                         "shell": "bash", "run": run}])
+            findings, details = self._findings_for(path, entry)
+        self.assertEqual(findings, [])
+        self.assertEqual(details[0]["status"], "ok")
+
+    def test_fail_closed_writer_downgraded_to_advisory_fails(self):
+        # Mutasyon: fail-closed adım `continue-on-error: true` ile advisory'e
+        # düşürülürse verdicti job'a taşımayan bir yazıcı kalır → FAIL.
+        run = ("set +e\npython3 guard.py > logs/g.log 2>&1\nstatus=$?\n"
+               "set -e\necho \"$status\" > logs/full_discover_drift_guard.exit\n"
+               "exit $status\n")
+        entry = [{"name": "full_discover_drift_guard",
+                  "path": "logs/full_discover_drift_guard.exit",
+                  "step": "drift", "fail_closed": True}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._workflow(tmp, [{"name": "drift", "if": "always()",
+                                         "continue-on-error": True,
+                                         "shell": "bash", "run": run}])
+            findings, _ = self._findings_for(path, entry)
+        self.assertEqual([f["kind"] for f in findings], ["unsafe-writer"])
+        self.assertIn("advisory", findings[0]["detail"])
+
+    def test_fail_closed_writer_without_always_fails(self):
+        # Mutasyon 2: `if: always()` düşerse önceki adım patladığında sidecar
+        # yazılmaz (adım atlanır) — kanıt kaybı, fail-closed ihlali.
+        run = ("set +e\npython3 guard.py > logs/g.log 2>&1\nstatus=$?\n"
+               "set -e\necho \"$status\" > logs/full_discover_drift_guard.exit\n"
+               "exit $status\n")
+        entry = [{"name": "full_discover_drift_guard",
+                  "path": "logs/full_discover_drift_guard.exit",
+                  "step": "drift", "fail_closed": True}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = self._workflow(tmp, [{"name": "drift", "shell": "bash",
+                                         "run": run}])
+            findings, _ = self._findings_for(path, entry)
+        self.assertEqual([f["kind"] for f in findings], ["unsafe-writer"])
+        self.assertIn("if: always()", findings[0]["detail"])
 
     def test_two_writers_is_ambiguous(self):
         run = ("set +e\ncmd\nstatus=$?\nset -e\n"

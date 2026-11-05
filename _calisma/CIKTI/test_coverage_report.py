@@ -299,6 +299,7 @@ HOOK_COVERAGE = {
         "test_check_latex_surface.py",
         "test_pr_hygiene.py",
         "test_branch_cleanup_advisor.py",
+        "test_ci_full_discover_drift_guard.py",
     ],
 }
 
