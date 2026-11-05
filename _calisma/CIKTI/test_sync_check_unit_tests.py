@@ -625,5 +625,210 @@ class TestExcludeCiBindingGate(unittest.TestCase):
         self.assertEqual(calls, [], "izole koşumda repo-geneli kapı çalışmamalı")
 
 
+class TestScriptBindingGate(unittest.TestCase):
+    """Betik ↔ yürütme yüzeyi kapısı (sync --check'in DÖRDÜNCÜ hedefi).
+
+    Üçüncü hedef yalnız EXCLUDE kümesine bakıyordu: EXCLUDE'ya hiç girmemiş
+    ama hiçbir yerden çağrılmayan betikler görünmüyordu. Ölçüm (2026-11-05):
+    `_calisma/CIKTI` altında 7 betik hiçbir workflow / pre-commit / manifest /
+    import tarafından çağrılmıyordu. Bu sınıf, kapının bu sınıfı yakaladığını
+    ve yanlış "bağlı" üretmediğini pinler.
+    """
+
+    WORKFLOW = "name: t\non: [push]\njobs:\n  alpha:\n    steps:\n      - run: true\n"
+    CONFIG = "repos:\n  - hooks:\n      - id: gate-x\n        name: x\n"
+
+    def _tree(self, workflow=WORKFLOW, config=CONFIG):
+        """(td, scripts_dir, workflows_dir, config_path) — izole yüzey."""
+        td = tempfile.mkdtemp()
+        scripts = os.path.join(td, "scripts")
+        wf = os.path.join(td, "workflows")
+        os.makedirs(scripts)
+        os.makedirs(wf)
+        with open(os.path.join(wf, "verify.yml"), "w") as fh:
+            fh.write(workflow)
+        cfg = os.path.join(td, "cfg.yaml")
+        with open(cfg, "w") as fh:
+            fh.write(config)
+        return td, scripts, wf, cfg
+
+    @staticmethod
+    def _write(directory, name, body="print('x')\n"):
+        with open(os.path.join(directory, name), "w") as fh:
+            fh.write(body)
+
+    def _gate(self, scripts, wf, cfg, **kw):
+        # `roots=[scripts]`: sentetik isimler gerçek repo korpüsünde geçmediği
+        # için yüzey izole edilir (hız + sahte bağ önleme).
+        return s.run_check_orphan_scripts(directory=scripts, workflows_dir=wf,
+                                          config_path=cfg, roots=[scripts], **kw)
+
+    def test_blocks_script_with_no_reference_anywhere(self):
+        # Kapının özü: hiçbir yerde çağrılmayan betik = sessiz kör kapı.
+        td, scripts, wf, cfg = self._tree()
+        try:
+            self._write(scripts, "zz_probe_orphan.py")
+            self.assertEqual(self._gate(scripts, wf, cfg, declared={}), 1,
+                             "bağsız betik bloklanmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_workflow_invocation_is_a_binding(self):
+        td, scripts, wf, cfg = self._tree(
+            workflow=self.WORKFLOW +
+            "      - run: python3 _calisma/CIKTI/zz_probe_alpha.py\n")
+        try:
+            self._write(scripts, "zz_probe_alpha.py")
+            self.assertEqual(self._gate(scripts, wf, cfg, declared={}), 0,
+                             "workflow'dan çağrılan betik bağlı sayılmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_sibling_script_invocation_is_a_binding(self):
+        td, scripts, wf, cfg = self._tree()
+        try:
+            self._write(scripts, "zz_probe_beta.py")
+            self._write(scripts, "run_all.sh", "bash zz_probe_beta.py\n")
+            unbound = s.unbound_scripts(directory=scripts, workflows_dir=wf,
+                                        config_path=cfg, roots=[scripts])
+            self.assertNotIn("zz_probe_beta.py", unbound,
+                             "kardeş betikten çağrı bağ sayılmalı")
+            # Sürücü betiğin kendisi bağsız olduğu için kapı yine kırmızı:
+            # ölçüm kapının gerçekten sürücüyü de gördüğünü pinler.
+            self.assertIn("run_all.sh", unbound)
+        finally:
+            shutil.rmtree(td)
+
+    def test_import_is_a_binding(self):
+        td, scripts, wf, cfg = self._tree()
+        try:
+            self._write(scripts, "zz_probe_gamma.py")
+            self._write(scripts, "gate_driver.py",
+                        "import zz_probe_gamma\n")
+            unbound = s.unbound_scripts(directory=scripts, workflows_dir=wf,
+                                        config_path=cfg, roots=[scripts])
+            self.assertNotIn("zz_probe_gamma.py", unbound,
+                             "import edilen modül bağlı sayılmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_comment_mention_is_not_a_binding(self):
+        # Ölçülen hata: bootstrap_units.conf içindeki bir YORUM
+        # ("(check_bootstrap_toolchain.py)") betiği 'bağlı' gösteriyordu.
+        td, scripts, wf, cfg = self._tree()
+        try:
+            self._write(scripts, "zz_probe_delta.py")
+            self._write(scripts, "units.conf",
+                        "# bkz. (zz_probe_delta.py) — sadece yorum\nunit=ok\n")
+            self.assertEqual(self._gate(scripts, wf, cfg, declared={}), 1,
+                             "yorumda anılmak çağrı değildir")
+        finally:
+            shutil.rmtree(td)
+
+    def test_longer_name_does_not_bind(self):
+        # `test_x.py` içinde `x.py` geçmesi bağ değildir (token sınırı).
+        td, scripts, wf, cfg = self._tree()
+        try:
+            self._write(scripts, "zz_probe_eps.py")
+            self._write(scripts, "notes.txt", "test_zz_probe_eps.py\n")
+            self._write(scripts, "other.py",
+                        "# test_zz_probe_eps.py burada sadece ad olarak geçiyor\n")
+            self.assertEqual(self._gate(scripts, wf, cfg, declared={}), 1,
+                             "daha uzun adın parçası bağ sayılmamalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_declared_unbound_script_is_allowed(self):
+        td, scripts, wf, cfg = self._tree()
+        try:
+            self._write(scripts, "zz_probe_zeta.py")
+            rc = self._gate(scripts, wf, cfg,
+                            declared={"zz_probe_zeta.py": "bilinçli kabul"})
+            self.assertEqual(rc, 0, "gerekçeli kabul kaydı bloklanmamalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_declared_missing_script_fails(self):
+        td, scripts, wf, cfg = self._tree()
+        try:
+            self.assertEqual(
+                self._gate(scripts, wf, cfg,
+                           declared={"zz_probe_hayalet.py": "yok"}), 1,
+                "diskte olmayan kabul kaydı bayat sayılmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_declared_but_bound_script_fails(self):
+        td, scripts, wf, cfg = self._tree(
+            workflow=self.WORKFLOW +
+            "      - run: python3 zz_probe_eta.py\n")
+        try:
+            self._write(scripts, "zz_probe_eta.py")
+            self.assertEqual(
+                self._gate(scripts, wf, cfg,
+                           declared={"zz_probe_eta.py": "artık bağlı"}), 1,
+                "'bağsız' kaydı artık bağlı betik için stale sayılmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_skipped_in_fully_isolated_run(self):
+        td = tempfile.mkdtemp()
+        try:
+            self.assertEqual(
+                self._gate(os.path.join(td, "yok"), os.path.join(td, "yok-wf"),
+                           os.path.join(td, "yok.yaml"), declared={}), 0,
+                "repo yüzeyi yokken kapı kapsam dışı olmalı")
+        finally:
+            shutil.rmtree(td)
+
+    def test_partial_surface_fails_closed(self):
+        td, scripts, _wf, cfg = self._tree()
+        try:
+            self._write(scripts, "zz_probe_theta.py")
+            self.assertEqual(
+                self._gate(scripts, os.path.join(td, "yok-wf"), cfg,
+                           declared={}), 1,
+                "kısmi yüzeyde kör PASS üretilmemeli")
+        finally:
+            shutil.rmtree(td)
+
+    def test_run_check_wires_script_gate_and_skips_it_when_isolated(self):
+        orig = s.run_check_orphan_scripts
+        s.run_check_orphan_scripts = lambda **kw: 1
+        try:
+            rc = s.run_check()
+        finally:
+            s.run_check_orphan_scripts = orig
+        self.assertEqual(rc, 1, "betik-bağı kapısı run_check'e bağlı değil")
+
+        calls = []
+
+        def _spy(**kw):
+            calls.append(kw)
+            return 0
+
+        with tempfile.TemporaryDirectory() as td:
+            s.run_check_orphan_scripts = _spy
+            try:
+                s.run_check(directory=td, manifest=os.path.join(td, "m.list"))
+            finally:
+                s.run_check_orphan_scripts = orig
+        self.assertEqual(calls, [], "izole koşumda betik-bağı kapısı çalışmamalı")
+
+    def test_real_repo_has_no_undeclared_orphans(self):
+        # Regresyon kapısı: yeni bir bağsız betik eklenirse burada kırmızı.
+        self.assertEqual(s.run_check_orphan_scripts(), 0,
+                         "gerçek repoda bildirilmemiş bağsız betik var")
+
+    def test_real_repo_unbound_registry_is_honest(self):
+        cands = set(s.script_candidates())
+        declared = set(s.UNBOUND_SCRIPTS)
+        self.assertEqual(sorted(declared - cands), [],
+                         "UNBOUND_SCRIPTS'te diskte olmayan betik var")
+        self.assertTrue(all(s.UNBOUND_SCRIPTS[n].strip()
+                            for n in s.UNBOUND_SCRIPTS),
+                        "her kabul kaydının gerekçesi dolu olmalı")
+
+
 if __name__ == "__main__":
     unittest.main()

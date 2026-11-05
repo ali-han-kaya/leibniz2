@@ -28,6 +28,13 @@ Bu script, update-config/update-changelog desenindeki gibi auto-sync yapar:
     ise repo'da hiçbir yere bağlı değildi (workflow/pre-commit/manifest: 0
     eşleşme) — yani job yeniden adlandırıldığında kapı sessizce körleşiyordu.
     Bu hedef YAZMAZ: bildirim gerekçesiyle kod içinde elle verilir.
+  - DÖRDÜNCÜ HEDEF (2026-11-05 boşluğu): aynı bağ sorusu artık YALNIZ
+    EXCLUDE'lu testler için değil, `_calisma/CIKTI` altındaki TÜM yürütme
+    betikleri (.py + .sh, test_* dışı) için sorulur. Üçüncü hedef yalnız
+    EXCLUDE kümesine baktığı için, EXCLUDE dışındaki ölü kapılar görünmüyordu:
+    ölçümde 7 betik hiçbir workflow/pre-commit/manifest/import tarafından
+    çağrılmıyordu (bkz. UNBOUND_SCRIPTS). Bağsız betik = sessizce kör kapı
+    ya da ölü kod; ikisi de "kapı var" sanılan yerde ölçüm üretmiyor.
   - --check: HERHANGİ BİRİ drift'liyse exit 1 (fail-closed kapı — pre-commit/CI)
   - --update: senkronlanabilen hedefleri (manifest + HOOK_COVERAGE) günceller,
     değişenleri git add ile stage eder
@@ -417,6 +424,59 @@ FULL_DISCOVER_SENTINEL = '-p "test_*.py"'
 WORKFLOWS_DIR = os.path.join(ROOT, ".github", "workflows")
 PRECOMMIT_CONFIG = os.path.join(ROOT, ".pre-commit-config.yaml")
 
+# ────────────────────────────────────────────────────────────────────────────
+# BETİK ↔ YÜRÜTME YÜZEYİ (2026-11-05, dördüncü hedef)
+#
+# Üçüncü hedef "EXCLUDE'lu test nerede koşar?" diye soruyordu ve yalnız
+# EXCLUDE kümesine bakıyordu. Bu yüzden EXCLUDE'ya hiç girmemiş ama hiçbir
+# yerde de çağrılmayan betikler görünmüyordu — kapı sessizce ölüyordu.
+# Burada soru genişletildi: `_calisma/CIKTI` altındaki her yürütme betiği
+# (.py + .sh, test_* hariç) EN AZ BİR yürütme yüzeyine bağlı olmalı:
+#   * bir workflow adımı/file (`.github/workflows/*.yml`)
+#   * `.pre-commit-config.yaml`
+#   * check_unit_tests.list manifest'i veya HOOK_COVERAGE
+#   * verify_delivery.py / Makefile
+#   * kardeş bir betikten dosya adıyla çağrı ya da `import <modül>`
+# Doküman/README bu listede DEĞİLDİR: dokümanda anılmak betiği çalıştırmaz.
+# Ölçüldü: `check_bootstrap_toolchain.py` yalnız bir plan dokümanında geçiyor
+# ve testi bu ağaçta yok → gerçekten hiçbir yerde koşmuyor.
+# ────────────────────────────────────────────────────────────────────────────
+BINDING_SURFACE_FILES = (
+    MANIFEST,
+    COVERAGE_FILE,
+    os.path.join(CIKTI, "verify_delivery.py"),
+    os.path.join(ROOT, "Makefile"),
+)
+
+# Kabul listesi: ölçümde hiçbir yürütme yüzeyine bağlı çıkmayan ve BİLİNÇLİ
+# olarak silinmeyen betikler. Her gerekçe ölçüme dayanır; yeni bir bağsız betik
+# buraya gerekçesiz giremez (kapı fail-closed). Girdi artık bağlıysa ya da
+# diskte yoksa kapı yine kırmızıdır — kayıt gerçeği yansıtmak zorunda.
+UNBOUND_SCRIPTS = {
+    "artifact_coverage.py":
+        "paylaşılan artefakt tanımları; REPRODUCIBILITY_EXCLUDED hiçbir betikte "
+        "kullanılmıyor (0 referans) — ölü sabit",
+    "build_design_preview.py":
+        "design_preview.html üretir; hiçbir hook/job çağırmıyor (çıktı commit dışı)",
+    "check_bootstrap_toolchain.py":
+        "dev_bootstrap envanter kapısı; testi (test_check_bootstrap_toolchain.py) "
+        "bu ağaçta yok, yalnız bir plan dokümanında anılıyor",
+    "check_merge_decision_evidence.py":
+        "MERGE_DECISION dokümanı kanıt kapısı; hook/job/manifest bağı yok",
+    "ci_fresh_clone_test.sh":
+        "fresh-clone E2E; `fresh-bootstrap` workflow'u yalnız BOOTSTRAP OK'u "
+        "denetliyor, bu betiği çağırmıyor",
+    "parse_unit_test_failures.py":
+        "unit_tests.log ayrıştırıcı; yerini "
+        "github_scripts/unit_test_failure_comment.js aldı",
+    "run_full_with_coq.sh":
+        "opam ortamını yükleyip verify_delivery --full + K19 koşan yerel "
+        "sarmalayıcı; CI/hook çağırmıyor",
+    # Ölçüm kapsamı (2026-11-05): 161 aday betik tarandı; 7'si bağsız çıktı.
+    # Bu yedi girdi karar kaydıdır — yeni bir bağsız betik buraya girmeden
+    # commit bloklanır. Silmek/bir kapıya bağlamak ayrı bir iştir.
+}
+
 
 def read_workflows_text(workflows_dir=None):
     """Workflow dosyalarının metinleri (dizin yoksa boş liste → kör kapı)."""
@@ -563,8 +623,211 @@ def run_check_exclude_binding(exclude=None, ci_jobs=None, hooks=None,
     return rc
 
 
+def script_candidates(directory=None):
+    """Yürütme betiği adayları: test_* dışı .py/.sh (dunder/yardımcı hariç)."""
+    d = directory or CIKTI
+    out = []
+    if not os.path.isdir(d):
+        return out
+    for name in sorted(os.listdir(d)):
+        if not name.endswith((".py", ".sh")):
+            continue
+        if name.startswith("test_") or name.startswith("__"):
+            continue
+        if not os.path.isfile(os.path.join(d, name)):
+            continue
+        out.append(name)
+    return out
+
+
+# Token eşleşmesi: `x.py`, `x.py.bak` / `test_x.py` gibi daha uzun bir adın
+# parçası sayılmaz (yanlış "bağlı" üretmemek için). Alternatif regex yerine
+# tokenizasyon seçildi: 161 aday × 4700 dosya alternasyon regex'i --check'i
+# 9s'ye çıkarıyordu (ölçüldü); token+set ~1.1s.
+TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.\-]*")
+IMPORT_RE = re.compile(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_.]*)\b", re.M)
+
+
+def _strip_comments(text):
+    """Tam-satır yorumlarını siler: yorumda anılmak çağrı DEĞİLDİR.
+
+    Ölçüldü (2026-11-05): `_calisma/bootstrap_units.conf` içindeki
+    "# ... (check_bootstrap_toolchain.py) ..." yorumu, hiçbir yerden
+    çağrılmayan betiği 'bağlı' gösteriyordu.
+    """
+    return re.sub(r"(?m)^\s*#.*$", "", text)
+
+
+def _iter_text_files(root_abs, exts=(".py", ".sh", ".yml", ".yaml", ".js",
+                                ".ts", ".tsx", ".json", ".list", ".conf"),
+                     skip_dirs=frozenset({".git", "node_modules", ".venv_z3",
+                                          "__pycache__", ".next", ".worktrees",
+                                          "dist", "build", ".vercel"}),
+                     max_bytes=512 * 1024):
+    """root altındaki küçük metin dosyalarını (yol, metin) olarak üretir."""
+    if not os.path.isdir(root_abs):
+        return
+    for dp, dn, fn in os.walk(root_abs):
+        dn[:] = sorted(d for d in dn if d not in skip_dirs)
+        for name in sorted(fn):
+            if not name.endswith(exts):
+                continue
+            p = os.path.join(dp, name)
+            try:
+                if os.path.getsize(p) > max_bytes:
+                    continue
+                with open(p, encoding="utf-8", errors="replace") as fh:
+                    yield p, fh.read()
+            except OSError:
+                continue
+
+
+def binding_corpus(directory=None, workflows_dir=None, config_path=None,
+                   roots=None):
+    """(kaynak, metin) çiftleri: yürütme yüzeyleri + gerçek çağırıcı kod.
+
+    Korpüs DAR tutulmaz: bir betiği `_calisma/mcp/verify_mcp/server.py` gibi
+    repo içindeki BAŞKA bir kod çağırabilir (ölçüldü: `start_preview.sh`).
+    Doküman/README yüzey DEĞİLDİR — orada anılmak betiği koşmaz.
+    Denetçinin kendisi de korpüse girmez: UNBOUND_SCRIPTS kaydındaki adlar
+    kendi metninde geçtiği için sahte "bağlı" üretirdi (ölçülen hata).
+    """
+    d = directory or CIKTI
+    out = []
+    for i, blob in enumerate(read_workflows_text(workflows_dir)):
+        out.append(("workflow#%d" % i, blob))
+    cfg = config_path or PRECOMMIT_CONFIG
+    try:
+        with open(cfg, encoding="utf-8") as fh:
+            out.append((cfg, fh.read()))
+    except OSError:
+        pass
+    for p in BINDING_SURFACE_FILES:
+        if not os.path.exists(p):
+            continue
+        try:
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                out.append((p, fh.read()))
+        except OSError:
+            continue
+    scan_roots = roots if roots is not None else [
+        CIKTI, os.path.join(ROOT, "_calisma"), os.path.join(ROOT, "api"),
+        os.path.join(ROOT, "design-system"), os.path.join(ROOT, "apps"),
+    ]
+    seen = set()
+    auditor = os.path.basename(os.path.abspath(__file__))
+    for r in scan_roots:
+        for p, text in _iter_text_files(r):
+            base = os.path.basename(p)
+            if base == auditor or p in seen:
+                continue
+            seen.add(p)
+            out.append((base, text))
+    if d != CIKTI:  # test izolasyonu: geçici aday dizini de taranır
+        for p, text in _iter_text_files(d):
+            if os.path.basename(p) == auditor:
+                continue
+            out.append((os.path.basename(p), text))
+    return [(src, _strip_comments(text)) for src, text in out]
+
+
+def bound_scripts(candidates, corpus):
+    """Korpüste en az bir kez anılan/import edilen betiklerin kümesi.
+
+    Tokenize + küme kesişimiyle taranır (alternasyon regex'i 4700 dosyada
+    ~9s sürüyordu — ölçüldü; token+set ~1.1s). Bir betiğin KENDİ metnindeki
+    geçişi bağ sayılmaz (kendini bağlayan kayıt sahte PASS üretir).
+
+    SINIR (bilinçli): ölçüm TEK ADIMDIR. Yalnızca kendisi de ölü olan bir
+    betikten referans alan betik burada "bağlı" görünür; transitif ölü
+    analiz kapsam dışıdır (maliyet/karmaşıklık oranı düşük).
+    """
+    if not candidates:
+        return set()
+    names = set(candidates)
+    mod2name = {n[:-3]: n for n in candidates if n.endswith(".py")}
+    bound = set()
+    for src, text in corpus:
+        found = set(TOKEN_RE.findall(text)) & names
+        if mod2name:
+            found.update(mod2name[m] for m in IMPORT_RE.findall(text)
+                         if m in mod2name)
+        found.discard(src)
+        bound |= found
+    return bound
+
+
+def unbound_scripts(directory=None, workflows_dir=None, config_path=None,
+                    roots=None):
+    """Hiçbir yürütme yüzeyine bağlı olmayan betiklerin listesi (ölçüm).
+
+    Kapı da testler de aynı ölçümü kullanır — iki ayrı sezgi yok.
+    """
+    candidates = script_candidates(directory)
+    corpus = binding_corpus(directory, workflows_dir, config_path, roots=roots)
+    bound = bound_scripts(candidates, corpus)
+    return [n for n in candidates if n not in bound]
+
+
+def run_check_orphan_scripts(directory=None, workflows_dir=None,
+                             config_path=None, declared=None, roots=None):
+    """Betik ↔ yürütme yüzeyi bağı; bağsız betik varsa 1 döndür (fail-closed).
+
+    Üç denetim:
+      1) BAĞSIZ  — aday betik hiçbir yüzeyde geçmiyor ve import edilmiyorsa
+         kapı kırmızı (UNBOUND_SCRIPTS'te gerekçeli kaydı yoksa).
+      2) KAYIP   — UNBOUND_SCRIPTS'teki betik diskte yoksa kayıt bayat.
+      3) STALE   — "bağsız" diye kayıtlı betik artık bir yüzeye bağlıysa
+         kayıt gerçeği yansıtmıyor.
+
+    Yazmaz: bağ kurmak (hook/job eklemek) veya betiği silmek kararı insana
+    aittir; kapı yalnız ölçer ve bloklar.
+    """
+    declared = dict(UNBOUND_SCRIPTS if declared is None else declared)
+    blobs = read_workflows_text(workflows_dir)
+    cfg_ids = precommit_hook_ids(config_path)
+    if not blobs and not cfg_ids:
+        print("NOT: repo yüzeyi yok (izole koşum) — betik↔yürütme bağı atlandı.")
+        return 0
+    if not blobs or not cfg_ids:
+        print("HATA: yürütme yüzeyi eksik (workflow veya pre-commit config) — "
+              "betik↔yürütme bağı doğrulanamaz, commit bloklanır.")
+        return 1
+
+    candidates = script_candidates(directory)
+    unbound = unbound_scripts(directory, workflows_dir, config_path, roots=roots)
+
+    rc = 0
+    unexpected = [n for n in unbound if n not in declared]
+    if unexpected:
+        print("Hiçbir yürütme yüzeyine bağlı olmayan betik: "
+              + ", ".join(unexpected))
+        print("  Çözüm: betiği bir pre-commit hook'una / CI job'ına / adıma "
+              "bağla; hiçbir yerden koşmuyorsa sil. Bilinçli tutulacaksa "
+              "UNBOUND_SCRIPTS'e gerekçeyle ekle — bağsız betik sessizce "
+              "kör bir kapıdır.")
+        rc = 1
+
+    gone = sorted(n for n in declared if n not in candidates)
+    if gone:
+        print("UNBOUND_SCRIPTS'te olup diskte bulunmayan betik: "
+              + ", ".join(gone))
+        print("  Çözüm: girdiyi sil — kayıt diskteki gerçekle eşleşmeli.")
+        rc = 1
+
+    rebound = sorted((set(declared) & set(candidates)) - set(unbound))
+    if rebound:
+        print("UNBOUND_SCRIPTS 'bağsız' diyor ama betik artık bağlı: "
+              + ", ".join(rebound))
+        print("  Çözüm: girdiyi kaldır — kabul kaydı gerçeği yansıtmalı.")
+        rc = 1
+
+    return rc
+
+
 def run_check(directory=None, manifest=None, coverage=None):
-    """manifest VEYA HOOK_COVERAGE VEYA EXCLUDE-bağlaması drift'liyse 1 döndür."""
+    """manifest VEYA HOOK_COVERAGE VEYA EXCLUDE-bağlaması VEYA betik-bağı
+    drift'liyse 1 döndür."""
     rc = 0
     disc = discover(directory)
     mf = manifest or MANIFEST
@@ -586,6 +849,10 @@ def run_check(directory=None, manifest=None, coverage=None):
     # denetimdir (EXCLUDE kümesi ve workflow yüzeyi tekil); izole koşumda
     # (--dir) çalıştırılmaz — sandbox testleri kendi yüzeyini enjekte eder.
     if directory is None and run_check_exclude_binding() == 1:
+        rc = 1
+    # Dördüncü hedef: EXCLUDE dışındaki betiklerin de bir yürütme yüzeyi
+    # olmalı (aynı repo-geneli yüzey; izole koşumda çalıştırılmaz).
+    if directory is None and run_check_orphan_scripts() == 1:
         rc = 1
     return rc
 
@@ -622,7 +889,8 @@ def run_update(stage=True, directory=None, manifest=None, coverage=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="check-unit-tests liste senkronu")
     ap.add_argument("--check", action="store_true",
-                    help="manifest/HOOK_COVERAGE/EXCLUDE-bağlaması drift'indeyse exit 1")
+                    help="manifest/HOOK_COVERAGE/EXCLUDE-bağlaması/betik-bağı "
+                         "drift'indeyse exit 1")
     ap.add_argument("--update", action="store_true", help="manifest + HOOK_COVERAGE güncelle + stage (varsayılan)")
     ap.add_argument("--no-stage", action="store_true", help="git add yapma (test izolasyonu)")
     ap.add_argument("--list", action="store_true", help="koşulacak testleri listele")
