@@ -713,6 +713,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-04 | feat | (docx) reword-working docx export zincirini land et (#204) | [`a64ee36`](https://github.com/ali-han-kaya/leibniz2/commit/a64ee36) |
 | 2026-11-04 | docs | (deploy) #204 sonrasi kanit satiri (gap 3'ten 0) (#206) | [`e675370`](https://github.com/ali-han-kaya/leibniz2/commit/e675370) |
 | 2026-11-05 | chore | (trend) TestUpsertDedup öncesi PEP8 boş satır onarımı | [`7497bf6`](https://github.com/ali-han-kaya/leibniz2/commit/7497bf6) |
+| 2026-11-05 | refactor | (coverage) AST test sayımı + betik bağı kapısı (#209) | [`dad180b`](https://github.com/ali-han-kaya/leibniz2/commit/dad180b) |
 
 ### Regresyon notları
 
