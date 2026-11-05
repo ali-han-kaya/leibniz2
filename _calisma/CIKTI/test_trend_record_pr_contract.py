@@ -188,5 +188,54 @@ class TrendArtifactContract(unittest.TestCase):
                       "kanıt PR yolu çökse de yüklenmeli")
 
 
+class TrendPrEvidenceEmbed(unittest.TestCase):
+    """Haftalık trend PR'ı GÖMÜLÜ görsel kanıt taşır (2026-11-05 sözleşmesi).
+
+    Ölçülen boşluk: svg üretilip artifact'a yükleniyordu ama PR'da yalnız ham
+    jsonl satırı vardı. Artifact URL'i oturum isteyen bir zip'tir; GitHub
+    yorumlarda satır-içi <svg> etiketini temizler ve data: URI'yi çekmez. Tek
+    render edilebilir yol: svg'yi kayıtla AYNI commit'te dala koymak ve PR
+    metnine commit SHA'sına PİNLİ raw URL ile gömmektir. SHA pinelemesi şart:
+    dal ilerledikçe eski ölçümün grafiği sessizce değişmemeli.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._body = record_step_text()
+
+    def test_generated_svg_is_staged_with_the_record(self):
+        self.assertIn('SVG_REL="docs/determinism_trend/determinism-trend.svg"',
+                      self._body, "svg yolu adımda tanımlı değil")
+        self.assertIn('cp "$SVG_SRC" "$SVG_REL"', self._body,
+                      "üretilen svg repo yoluna kopyalanmıyor → dalda dosya yok")
+        self.assertIn('git add "$SVG_REL"', self._body,
+                      "svg ayrı commit'te kalırsa görsel PR'ın commit'inde yok")
+
+    def test_image_is_raw_url_pinned_to_the_pushed_commit(self):
+        self.assertIn("raw.githubusercontent.com", self._body,
+                      "artifact URL'i (veya <svg>) GitHub yorumunda render edilmez")
+        self.assertIn("git rev-parse HEAD", self._body,
+                      "görsel dal adına bağlanmış → dal ilerleyince değişir")
+        self.assertRegex(
+            self._body,
+            r"!\[determinism trend\]\(\$\{RAW_BASE\}/\$\{SLUG\}/\$\{REF\}",
+            "PR metnine gömülü markdown görsel satırı yok")
+
+    def test_both_pr_paths_send_the_evidence_body(self):
+        # Yeni PR → gövde; mevcut PR → yorum. İkisi de görseli taşımalı.
+        self.assertIn('gh pr create', self._body)
+        self.assertIn('--body "$BODY"', self._body)
+        self.assertIn('gh pr comment', self._body)
+        self.assertIn('--body "$NOTE"', self._body)
+
+    def test_missing_evidence_degrades_to_warning_not_broken_image(self):
+        self.assertIn('if [ -f "$SVG_REL" ]', self._body,
+                      "svg yokluğu denetlenmiyor → kırık görsel URL'i gidebilir")
+        self.assertRegex(self._body, r"UYARI: [^\n]*gömülü görsel olmadan",
+                         "görsel atlanınca sessiz kalıyor (uyarı yok)")
+        self.assertIn("FAIL: trend kaydı için PR yolu kurulamadı", self._body,
+                      "mevcut fail-closed PR sözleşmesi bozulmuş")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -197,6 +197,15 @@ jobs:
       #       eşleşmesi) ve push onları da taşır.
       #   (2) FAIL-CLOSED — PR yolu kurulamazsa adım 1 döner. "Ölçüm merge
       #       yolunda değil" başarı değildir; sessiz kayıp olayın kendisidir.
+      #
+      # 2026-11-05 — GÖRSEL KANIT PR'DA GÖMÜLÜ: badge svg'si kayıtla AYNI
+      # commit'e girer ve PR gövdesine/yorumuna `![...](raw URL)` olarak
+      # eklenir. Gerekçe: yalnız artifact + jsonl satırı vardı, haftalık
+      # trend PR'ında gözle görülür kanıt yoktu. GitHub yorumlarda satır-içi
+      # <svg> etiketini temizler, data: URI'yi çekmez; artifact URL'i de
+      # oturum isteyen bir zip'tir. Bu yüzden dosya dala commit'lenir ve
+      # raw.githubusercontent URL'i COMMIT SHA'sına pinlenir → eski ölçümün
+      # görseli sonraki haftalarda sessizce değişmez.
       - name: Commit trend record
         env:
           TREND_BRANCH: chore/determinism-trend-record
@@ -206,12 +215,27 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           RECORD="docs/determinism_trend/determinism_trend.jsonl"
+          SVG_REL="docs/determinism_trend/determinism-trend.svg"
+          SVG_SRC="${OUT_DIR:-}/determinism-trend.svg"
+          RAW_BASE="https://raw.githubusercontent.com"
           git add "$RECORD"
-          if git diff --cached --quiet; then
+          # Gömülü görselin kaynağı dalda durmak ZORUNDA: yoksa PR metninde
+          # render edilebilir bir URL olmaz. Üretim adımı çökerse zaten adım
+          # kırmızı; buradaki koşul yalnız eksik OUT_DIR/SVG durumunu güvenli
+          # yapar (kırık görsel yerine görünür uyarı).
+          if [ -n "${OUT_DIR:-}" ] && [ -f "$SVG_SRC" ]; then
+            mkdir -p docs/determinism_trend
+            cp "$SVG_SRC" "$SVG_REL"
+            git add "$SVG_REL"
+          fi
+          # Guard YALNIZ kayda bakar (pathspec): artık svg de stage'de olduğu
+          # için "stage boş" genel kontrolü bu değişmezi gevşetirdi —
+          # --update hiç satır eklemezse commit yine de oluşurdu.
+          if git diff --cached --quiet -- "$RECORD"; then
             echo "FAIL: --update ekleme yaptı ama stage boş — beklenmedik durum"
             exit 1
           fi
-          git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; plus the canvas family apex (plate-book) canonical hash from canvas_determinism_test.sh; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; plus the canvas family apex (plate-book) canonical hash from canvas_determinism_test.sh; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl; the generated trend svg (docs/determinism_trend/determinism-trend.svg) rides the same commit so the PR can embed it as visual evidence." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
 
           # (1) Kayıp koruması: bot dalında, main'de olmayan kayıt varsa
           #     üstüne yazma — hepsini birleştirip aynı commit'te taşı
@@ -232,16 +256,45 @@ jobs:
           fi
           git push --force origin "HEAD:$TREND_BRANCH"
 
+          # Gömülü kanıt: görsel URL'i push edilen commit'e pinlenir. SVG
+          # dalda yoksa ya da GITHUB_REPOSITORY yoksa görsel satırı HİÇ
+          # eklenmez (kırık görsel yerine uyarı) — yazılı kanıt yine gider.
+          SHA=$(git rev-parse HEAD 2>/dev/null || true)
+          REF="${SHA:-$TREND_BRANCH}"
+          SLUG="${GITHUB_REPOSITORY:-}"
+          EVIDENCE=""
+          if [ -f "$SVG_REL" ]; then
+            if [ -n "$SLUG" ]; then
+              EVIDENCE="![determinism trend](${RAW_BASE}/${SLUG}/${REF}/${SVG_REL})"
+            else
+              echo "UYARI: GITHUB_REPOSITORY yok — PR gömülü görsel olmadan yazılıyor" >&2
+            fi
+          else
+            echo "UYARI: trend svg dalda yok — PR gömülü görsel olmadan yazılıyor" >&2
+          fi
+
           # (2) Fail-closed: kayıt main'e girecek bir yol bulmadan yeşil çıkma.
+          BODY="Automated weekly determinism trend measurement (linux baseline; families: manuscript tectonic+TeXLive and canvas plate-book — 5 sources measured, apex hash recorded). Canonical hashes in $RECORD."
+          if [ -n "$EVIDENCE" ]; then
+            BODY="$BODY"$'\n\n'"$EVIDENCE"
+          fi
+          if [ -n "$SLUG" ] && [ -n "${GITHUB_RUN_ID:-}" ]; then
+            BODY="$BODY"$'\n\n'"Run: https://github.com/$SLUG/actions/runs/$GITHUB_RUN_ID — artifact: determinism-trend (svg + json)."
+          fi
           PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
           if [ -z "$PR" ]; then
-            gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "Automated weekly determinism trend measurement (linux baseline; families: manuscript tectonic+TeXLive and canvas plate-book — 5 sources measured, apex hash recorded). Canonical hashes in docs/determinism_trend/determinism_trend.jsonl." || true
+            gh pr create --base main --head "$TREND_BRANCH" --title "chore: weekly determinism trend record (bot)" --body "$BODY" || true
             PR=$(gh pr list --head "$TREND_BRANCH" --state open --json number --jq '.[0].number // ""')
           else
             # PR zaten açıksa yenisini açma; sadece "yeni ölçüm düştü"
             # sinyalini bırak ki insana görünür olsun (fail-closed
-            # değişikliğinde bu dal bilinçli olarak korundu).
-            gh pr comment "$PR" --body "New measurement appended (run ${GITHUB_RUN_ID:-unknown})."
+            # değişikliğinde bu dal bilinçli olarak korundu). Görsel kanıt
+            # yoruma da gömülür: haftalık thread'de her ölçüm kendi grafiğiyle.
+            NOTE="New measurement appended (run ${GITHUB_RUN_ID:-unknown})."
+            if [ -n "$EVIDENCE" ]; then
+              NOTE="$NOTE"$'\n\n'"$EVIDENCE"
+            fi
+            gh pr comment "$PR" --body "$NOTE"
           fi
           if [ -z "$PR" ]; then
             echo "FAIL: trend kaydı için PR yolu kurulamadı — ölçüm main'e girmedi."
