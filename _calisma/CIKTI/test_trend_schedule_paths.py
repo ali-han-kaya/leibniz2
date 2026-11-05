@@ -62,6 +62,14 @@ def load_yaml():
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
+# Stub `git rev-parse HEAD` değeri: PR'a gömülen görsel URL'i bu SHA'ya
+# pinlenir — sözleşme testi TAM URL'i doğrular (dal adı değil).
+EVIDENCE_SHA = "0123456789abcdef0123456789abcdef01234567"
+EVIDENCE_REL = "docs/determinism_trend/determinism-trend.svg"
+EVIDENCE_URL = ("https://raw.githubusercontent.com/owner/repo/%s/%s"
+                % (EVIDENCE_SHA, EVIDENCE_REL))
+
+
 def step_script(name="Commit trend record"):
     """Workflow'tan adı verilen step'in `run:` betiğini döndürür."""
     data = load_yaml()
@@ -76,7 +84,7 @@ class Sandbox:
     """Stub `git`/`gh` olan geçici repo — push/PR yollarını gerçekten yürütür."""
 
     def __init__(self, *, gh_create_ok, gh_pr_exists=None, gh_auto_ok=True,
-                 stage_empty=False):
+                 stage_empty=False, with_evidence=False):
         self.dir = Path(tempfile.mkdtemp())
         self.bin = self.dir / "bin"
         self.bin.mkdir()
@@ -97,11 +105,23 @@ class Sandbox:
         # FAIL alır; 1 = fark var -> normal push yolu. Semantik ters yazılırsa
         # fail-closed muhafızı ters çalışır ve test kendini yanıltır.
         stage_rc = 0 if stage_empty else 1
+        # Görsel kanıt: gerçek koşumda "Generate ... svg/json" adımı OUT_DIR'i
+        # GITHUB_ENV'e yazar; buradaki opt-in bayrak onu ve repo slug'ını
+        # sağlar. Üretim adımı çökse bile adım KIRMIZI olur — bu fixture
+        # yalnız "OUT_DIR dolu + svg var" durumunu temsil eder.
+        self.with_evidence = with_evidence
+        self.out_dir = self.dir / "runner_temp"
+        if with_evidence:
+            self.out_dir.mkdir()
+            (self.out_dir / "determinism-trend.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg" width="8" '
+                'height="8"></svg>\n', encoding="utf-8")
         self._stub("git",
                    '#!/bin/sh\n'
                    'echo "git $*" >> "$CALLS"\n'
                    'if [ "$1" = "diff" ]; then exit %d; fi\n'
-                   'exit 0\n' % stage_rc)
+                   'if [ "$1" = "rev-parse" ]; then echo "%s"; fi\n'
+                   'exit 0\n' % (stage_rc, EVIDENCE_SHA))
         self._stub("gh",
                    '#!/bin/sh\n'
                    'echo "gh $*" >> "$CALLS"\n'
@@ -150,12 +170,16 @@ class Sandbox:
             cmd += "export %s=%s\n" % (
                 k, re.sub(r"\$\{\{[^}]*\}\}", "gha-placeholder", str(v)))
         cmd += script
+        run_env = {
+            "PATH": "%s:/usr/bin:/bin" % self.bin,
+            "CALLS": str(self.calls),
+            "GITHUB_RUN_ID": "999",
+        }
+        if self.with_evidence:
+            run_env["OUT_DIR"] = str(self.out_dir)
+            run_env["GITHUB_REPOSITORY"] = "owner/repo"
         return subprocess.run(["bash", "-c", cmd], cwd=str(self.dir),
-                              capture_output=True, text=True, env={
-                                  "PATH": "%s:/usr/bin:/bin" % self.bin,
-                                  "CALLS": str(self.calls),
-                                  "GITHUB_RUN_ID": "999",
-                              })
+                              capture_output=True, text=True, env=run_env)
 
     def log(self):
         if not self.calls.exists():
@@ -314,6 +338,58 @@ class TestPrLifecyclePaths(unittest.TestCase):
             self.assertIn("kuyruğa alınamadı", r.stdout)
         finally:
             sb.cleanup()
+
+
+class TestPrEvidenceEmbed(unittest.TestCase):
+    """Haftalık trend PR'ı GÖRSEL kanıtı gömer (2026-11-05 sözleşmesi).
+
+    Eski durum: svg yalnız artifact'ta kalıyordu; haftalık trend PR'ında
+    jsonl satırından başka kanıt yoktu. Artifact URL'i oturum isteyen bir
+    zip'tir ve GitHub yorumlarda satır-içi <svg>/data: URI'yi temizler —
+    tek render edilebilir yol dosyayı dala koyup raw URL'iyle gömmektir.
+    Görsel URL'i COMMIT SHA'sına pinlenir: dal ilerlediğinde eski ölçümün
+    grafiği sessizce değişmemeli.
+    """
+
+    def _sandbox(self, **kw):
+        sb = Sandbox(gh_create_ok=True, with_evidence=True, **kw)
+        self.addCleanup(sb.cleanup)
+        return sb
+
+    def test_svg_is_committed_with_the_record(self):
+        sb = self._sandbox(gh_pr_exists="77")
+        r = sb.run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((sb.dir / EVIDENCE_REL).is_file(),
+                        "svg dala commit'lenmedi → PR'da gömülecek dosya yok")
+        self.assertIn("git add " + EVIDENCE_REL, sb.log())
+
+    def test_comment_embeds_svg_pinned_to_the_pushed_commit(self):
+        sb = self._sandbox(gh_pr_exists="77")
+        r = sb.run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(any(l.startswith("gh pr comment") for l in sb.log()))
+        self.assertIn("![determinism trend](%s)" % EVIDENCE_URL,
+                      "\n".join(sb.log()))
+
+    def test_new_pr_body_carries_the_same_image(self):
+        sb = self._sandbox()
+        r = sb.run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(any(l.startswith("gh pr create") for l in sb.log()))
+        self.assertIn("![determinism trend](%s)" % EVIDENCE_URL,
+                      "\n".join(sb.log()))
+
+    def test_missing_svg_omits_image_instead_of_breaking_the_comment(self):
+        # OUT_DIR yok (üretim adımı çökmüş varsayımı): adım yine de yazılı
+        # kanıtı PR'a bırakır ama KIRIK görsel URL'i üretmez.
+        sb = Sandbox(gh_create_ok=True, gh_pr_exists="77")
+        self.addCleanup(sb.cleanup)
+        r = sb.run()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue(any("pr comment" in l for l in sb.log()))
+        self.assertNotIn("![determinism trend]", "\n".join(sb.log()))
+        self.assertIn("UYARI", r.stderr)
 
 
 class TestCanvasFamilyWiring(unittest.TestCase):
