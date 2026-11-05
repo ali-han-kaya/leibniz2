@@ -3,7 +3,8 @@
 # check_unit_tests_hook.sh — pre-commit check-unit-tests kapısının dış sarmalayıcısı.
 #
 # 1) sync_check_unit_tests.py --check (fail-closed): manifest + HOOK_COVERAGE
-#    drift'ini BLOKLAR — sessiz auto-fix YOK. Repo invariant'ı:
+#    drift'ini, EXCLUDE↔koşma-yeri bağını ve "hiçbir yürütme yüzeyine bağlı
+#    olmayan betik" durumunu BLOKLAR — sessiz auto-fix YOK. Repo invariant'ı:
 #    repo'da üç yazan hook vardır (update-config, check-changelog-sync,
 #    check-skills-index); bu kapı okuma-hook'tur. Gecikmeli (lag-one) changelog yazımı bu kapıya değil,
 #    check-changelog-sync'a aittir — tablo hash'le anahtarlıdır ve hash ancak
