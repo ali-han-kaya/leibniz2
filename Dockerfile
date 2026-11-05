@@ -120,11 +120,14 @@ RUN set -eux; \
 #     → floor 3.0.22-1~deb12u2 (kanıt: 2026-10-27, kurulu 3.0.20-1~deb12u2;
 #     aday `apt-cache policy`, bookworm-security).
 #   tzdata: DLA-4792-1 (2026b → düzeltme 2026c-0+deb12u1) → floor
-#     2026e-0+deb12u1; severity UNKNOWN — kapı seti seviye-bilinmeyen
+#     2026f-0+deb12u1; severity UNKNOWN — kapı seti seviye-bilinmeyen
 #     sonucu da fail-closed bloklar.
+#     2026-11-05 ROTASYON: 2026e-0+deb12u1 bookworm-security deposundan
+#     cekildi (E: Version ... was not found -> apt 100; docker-security +
+#     Local security smoke kirmizi); aday 2026f-0+deb12u1 oldu.
 #     Girdi SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt,
 #     her build'de taze yama.
-ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2 libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 tzdata=2026e-0+deb12u1"
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2 libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 tzdata=2026f-0+deb12u1"
 RUN set -eux; \
     if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \

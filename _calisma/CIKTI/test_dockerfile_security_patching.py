@@ -285,7 +285,7 @@ class TestDockerfileSecurityPatching(unittest.TestCase):
         # seviye (fail-closed kapı onu da bloklar) — floor'lar kalıcı kayıt.
         self.assertIn("libssl3=3.0.22-1~deb12u2", self._df)
         self.assertIn("openssl=3.0.22-1~deb12u2", self._df)
-        self.assertIn("tzdata=2026e-0+deb12u1", self._df)
+        self.assertIn("tzdata=2026f-0+deb12u1", self._df)
         self.assertIn("DLA-4792-1", self._df)
         self.assertIn("CVE-2026-63072", self._df)
 
