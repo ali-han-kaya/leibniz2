@@ -88,9 +88,15 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -uo pipefail
+          # GitHub'ın varsayılan shell'i `bash -e`; `set -uo pipefail` -e'yi
+          # KAPATMAZ. rc=1 meşru bir verdict olduğu için ölçüm komutunun
+          # etrafında -e'yi kapat; aksi halde rc=$? ve JSON çıktısı hiç
+          # çalışmaz, iş yanlışlıkla "UNMEASURED" görünür (run 44103757234).
+          set +e
           python3 _calisma/CIKTI/r4_cron_evidence.py --apply --json \
             > /tmp/r4.json 2> /tmp/r4.err
           rc=$?
+          set -e
           cat /tmp/r4.err >&2
           cat /tmp/r4.json
           if [ "$rc" -eq 2 ]; then
