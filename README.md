@@ -722,6 +722,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-18 | chore | (trend) record missing 2026-11-05..11-18 rows (#225) | [`f8d9608`](https://github.com/ali-han-kaya/leibniz2/commit/f8d9608) |
 | 2026-11-18 | docs | (deploy) [bot] R4 cron kanıt parçası (schedule tick) | [`88a5b69`](https://github.com/ali-han-kaya/leibniz2/commit/88a5b69) |
 | 2026-11-18 | fix | (ci) capture r4 verdict before shell errexit | [`d11624c`](https://github.com/ali-han-kaya/leibniz2/commit/d11624c) |
+| 2026-11-18 | docs | (deploy) record f8d9608d evidence and heal changelog (#229) | [`d6fe986`](https://github.com/ali-han-kaya/leibniz2/commit/d6fe986) |
 
 ### Regresyon notları
 
