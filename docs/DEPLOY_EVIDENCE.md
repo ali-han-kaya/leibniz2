@@ -437,6 +437,7 @@ push seti yeşil değildi (`df018aba` verify-delivery #41980292002 cancelled;
 
 | 2026-11-18 | f8d9608d | [success #44299578974](https://github.com/ali-han-kaya/leibniz2/actions/runs/44299578974) | [success #44299578912](https://github.com/ali-han-kaya/leibniz2/actions/runs/44299578912) | [success #44299578898](https://github.com/ali-han-kaya/leibniz2/actions/runs/44299578898) | [success #44290051302](https://github.com/ali-han-kaya/leibniz2/actions/runs/44290051302) |
 | 2026-11-18 | e5eb7c30 | [success #44334568474](https://github.com/ali-han-kaya/leibniz2/actions/runs/44334568474) | [success #44345681871](https://github.com/ali-han-kaya/leibniz2/actions/runs/44345681871) | [success #44345681636](https://github.com/ali-han-kaya/leibniz2/actions/runs/44345681636) | [success #44290051302](https://github.com/ali-han-kaya/leibniz2/actions/runs/44290051302) |
+| 2026-11-18 | 3d054305 | [success #44355153614](https://github.com/ali-han-kaya/leibniz2/actions/runs/44355153614) | [success #44359744953](https://github.com/ali-han-kaya/leibniz2/actions/runs/44359744953) | [success #44359753248](https://github.com/ali-han-kaya/leibniz2/actions/runs/44359753248) | [success #44359759718](https://github.com/ali-han-kaya/leibniz2/actions/runs/44359759718) |
 
 `f8d9608d` — PR #225 (`chore(trend): record missing 2026-11-05..11-18 rows`) merge'ü.
 Ledger'in önceki en yeni satırı `590be2e5` (2026-11-05) idi; aradaki anlamlı
