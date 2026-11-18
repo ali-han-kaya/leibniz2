@@ -1,8 +1,9 @@
 name: docker-security-cron-evidence
 
 # ────────────────────────────────────────────────────────────────────────────
-# HAFTALIK docker-security CRON'UNUN İLK `schedule` KOŞUMUNU ÖLÇER ve R4
-# DENETİM SATIRINA KANIT OLARAK YAZAR.
+# HAFTALIK docker-security CRON'UNUN İLK VE GÜNCEL `schedule` KOŞUMLARINI
+# ÖLÇER; İLK KOŞUMU KANIT OLARAK KORUR, GÜNCEL DURUMU AYRI RAPORLAR ve R4
+# DENETİM SATIRINA YAZAR.
 #
 # Sorun (ölçüldü, bu oturum): R4 satırı "cron PR #52 merge'i ile tetiklenebilir
 # hâle geldi, ancak henüz ateşlenmedi; ilk ateşleme 2026-10-05T03:43Z" diyordu.
@@ -25,10 +26,11 @@ name: docker-security-cron-evidence
 # `_calisma/CIKTI/r4_cron_evidence.py` (run: adımı). K1/K2 parite kuralı.
 #
 # FAIL-CLOSED: rc 2 (gh yok / API hatası / işaretler bozuk) = satıra hiçbir şey
-# yazılmaz ve iş KIRMIZI. rc 1 (schedule tick ateşlenmedi ya da koşum
+# yazılmaz ve iş KIRMIZI. rc 1 (schedule tick ateşlenmedi ya da GÜNCEL koşum
 # başarısız) = satır yine YAZILIR, iş yine KIRMIZI: "❌ ölçüldü" ile
 # "boş = ölçülmedi" farklı iddialardır. Yeşil yalnız iki durumda: bekleme
-# penceresi (pending) ve gerçek `schedule` koşumu + conclusion=success.
+# penceresi (pending) ve gerçek `schedule` koşumu + GÜNCEL conclusion=success;
+# ilk koşum failure olsa da kanıt olarak korunur.
 #
 # YAZMA YOLU: main branch-protection'lıdır (bare push GH006) → kayıt
 # changelog-heal ile aynı kanıtlanmış yoldan iner: bot dalı + PR + auto-merge.
@@ -145,9 +147,10 @@ jobs:
           {
             echo 'docs(deploy): [bot] R4 cron kanıt parçası (schedule tick)'
             echo ''
-            echo 'docker-security-cron-evidence ölçümü: ilk event=schedule koşumu'
-            echo '(run id, created_at, status, conclusion) ya da "hâlâ 0" hükmü'
-            echo 'R4 satırındaki makine-yönetimli parçaya yazıldı.'
+            echo 'docker-security-cron-evidence ölçümü: ilk ve güncel event=schedule'
+            echo 'koşumları (ilk koşum kanıt olarak korunur; güncel koşum durumu ayrı'
+            echo 'raporlanır) ya da "hâlâ 0" hükmü R4 satırındaki makine-yönetimli'
+            echo 'parçaya yazıldı.'
             echo 'docs(deploy) prefix i kanıt-boşluğu muafiyetindedir: bu bir kanıt'
             echo 'kaydıdır, ilerletilmiş bir değişiklik değil.'
           } > /tmp/r4_msg.txt
