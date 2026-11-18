@@ -21,7 +21,12 @@ concurrency:
 jobs:
   record:
     name: Run determinism experiment and record trend
-    runs-on: ubuntu-latest
+    # TeXLive'in apt paket sürümü runner imajına bağlıdır. `ubuntu-latest`
+    # 2026-11-16'da 26.04'e taşındı; aynı kaynak aynı SDE ile farklı
+    # kanonik hash üretti (trend invariant reddi). Determinizm için imaj
+    # pinlenir: imaj değişimi bilinçli bir yeniden-baseline olmadan
+    # trendi kıramaz.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -235,7 +240,7 @@ jobs:
             echo "FAIL: --update ekleme yaptı ama stage boş — beklenmedik durum"
             exit 1
           fi
-          git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-latest with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; plus the canvas family apex (plate-book) canonical hash from canvas_determinism_test.sh; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl; the generated trend svg (docs/determinism_trend/determinism-trend.svg) rides the same commit so the PR can embed it as visual evidence." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+          git commit -m "chore: record weekly determinism trend measurement" -m "TeXLive+SDE experiment (two independent SDE runs) on ubuntu-24.04 with pinned tectonic 0.17.0 (release digest verified) and TeXLive pdflatex; plus the canvas family apex (plate-book) canonical hash from canvas_determinism_test.sh; canonical hashes appended to docs/determinism_trend/determinism_trend.jsonl; the generated trend svg (docs/determinism_trend/determinism-trend.svg) rides the same commit so the PR can embed it as visual evidence." -m "Generated with GitHub Actions. Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
 
           # (1) Kayıp koruması: bot dalında, main'de olmayan kayıt varsa
           #     üstüne yazma — hepsini birleştirip aynı commit'te taşı
