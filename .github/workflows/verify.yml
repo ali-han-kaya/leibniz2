@@ -4152,6 +4152,29 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit "$rc"
 
+      # PREVIEW MIRROR BAYATLIK PROBE (fail-closed) — yukarıdaki adımlar
+      # mirror'ı repo'dan KURUP hemen --check koşuyor; bu haliyle --check
+      # yalnızca "az önce kopyalanan dosyalar yerinde mi" sorusunu yanıtlar ve
+      # BAYAT bir mirror'ı ASLA görmez. Bu probe kapının KENDİSİNİ ölçer:
+      # izole temp mirror'da (1) temiz → 0, (2) preview.js bozulur →
+      # --check 1 + "BAYAT/EKSİK: preview/preview.js", (3) K17
+      # --check-mirror 1 + [P1] + stale_files, (4) sync → yine 0.
+      # Kapı fail-open'a düşerse adım kırılır (exit ≠ 0 → job FAIL).
+      # Gerçek RUNNER_TEMP mirror'ına dokunmaz: temp kökü kendi kurar/siler.
+      - name: Preview mirror stale probe (fail-closed)
+        id: stale
+        run: |
+          set -uo pipefail
+          set +e
+          python3 _calisma/CIKTI/check_preview_mirror_stale.py \
+            --json-out mirror_stale_probe.json \
+            2>&1 | tee -a mirror_check_report.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "Preview mirror stale probe exit: $rc"
+          exit "$rc"
+
       - name: Write mirror check to run summary
         if: always()
         run: |
@@ -4162,6 +4185,7 @@ jobs:
             echo "- Fresh-clone setup (--check-ci): exit \`${{ steps.fcs.outputs.rc }}\`"
             echo "- K17 --check-mirror: exit \`${{ steps.k17.outputs.rc }}\`"
             echo "- Mirror coverage (--list ↔ repo): exit \`${{ steps.cov.outputs.rc }}\`"
+            echo "- Preview mirror stale probe: exit \`${{ steps.stale.outputs.rc }}\`"
             echo '```'
             cat mirror_check_report.txt 2>/dev/null || echo '(rapor yok)'
             echo '```'
@@ -4175,6 +4199,7 @@ jobs:
           path: |
             mirror_check_report.txt
             mirror_report.json
+            mirror_stale_probe.json
             bootstrap_smoke.txt
             fresh_clone_check_report.txt
           if-no-files-found: ignore
