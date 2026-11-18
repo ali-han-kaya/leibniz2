@@ -719,6 +719,9 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-05 | docs | (deploy) record dad180b3 push run evidence (#219) | [`12b78b9`](https://github.com/ali-han-kaya/leibniz2/commit/12b78b9) |
 | 2026-11-05 | docs | (deploy) record 590be2e5 dispatch evidence (#220) | [`0110c2a`](https://github.com/ali-han-kaya/leibniz2/commit/0110c2a) |
 | 2026-11-18 | ci | (trend) pin determinism runner to ubuntu-24.04 (#223) | [`f3faa16`](https://github.com/ali-han-kaya/leibniz2/commit/f3faa16) |
+| 2026-11-18 | chore | (trend) record missing 2026-11-05..11-18 rows (#225) | [`f8d9608`](https://github.com/ali-han-kaya/leibniz2/commit/f8d9608) |
+| 2026-11-18 | docs | (deploy) [bot] R4 cron kanıt parçası (schedule tick) | [`88a5b69`](https://github.com/ali-han-kaya/leibniz2/commit/88a5b69) |
+| 2026-11-18 | fix | (ci) capture r4 verdict before shell errexit | [`d11624c`](https://github.com/ali-han-kaya/leibniz2/commit/d11624c) |
 
 ### Regresyon notları
 
