@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""r4_cron_evidence.py — haftalık docker-security cron'unun SON `schedule`
-koşumunu ölçer ve R4 denetim satırına kanıt olarak yazar.
+"""r4_cron_evidence.py — haftalık docker-security cron'unun İLK VE GÜNCEL
+`schedule` koşumlarını ölçer ve R4 denetim satırına kanıt olarak yazar.
 
 Tarihsel kök-neden (bu oturum): R4 satırı "cron PR #52 merge'i ile
 tetiklenebilir hâle geldi, ancak henüz ateşlenmedi; ilk ateşleme
@@ -25,29 +25,33 @@ Bu betik o sessizliği ölçülebilir hâle getirir. Tek giriş noktasıdır
   1) `docker-security.yml`'in koşumlarını okur (tek kaynak: `gh run list`,
      R4 satırının kendi ölçüm komutuyla aynı — `--runs-file` ile offline).
   2) `event=schedule` koşumlarını ayırır, **beklenen tick'ten
-     (2026-10-05T03:43Z) sonraki EN GÜNCEL** koşumu seçer. Push / PR /
-     dispatch koşumları cron kanıtı SAYILMAZ: aynı yolu koşsalar da
+     (2026-10-05T03:43Z) sonraki İLK ve EN GÜNCEL** koşumları BİRLİKTE
+     seçer. İlk koşum ilk ateşleme kanıtıdır (conclusion'ı failure olsa da
+     parçada KORUNUR); güncel koşum ise bugünkü durumu AYRI raporlar. Push /
+     PR / dispatch koşumları cron kanıtı SAYILMAZ: aynı yolu koşsalar da
      tetikleyici farklıdır (runbook'un "elle koşum ne kanıtlar" ayrımı).
   3) Üç durumdan birini hükmeder:
        pending — sert bitişten önce, schedule koşumu yok (bekleme penceresi)
        missed  — sert bitiş geçti, schedule koşumu hâlâ yok → KIRMIZI
-       fired   — schedule koşumu var; conclusion=success ise PASS, değilse
-                 KIRMIZI (cron ateşlendi ama kapı düştü — gerçek sinyal)
+       fired   — schedule koşumu var; İLK koşumun conclusion'ı kanıt olarak
+                 korunur, GÜNCEL koşumun conclusion=success ise PASS, değilse
+                 KIRMIZI (cron ateşlendi ama güncel kapı düştü — gerçek sinyal)
   4) `--apply`: hükmü `docs/FULL_SCOPE_AUDIT_2026-09-17.md` R4 satırındaki
      işaretli parçaya yazar. Parça MAKİNE-YÖNETİMLİDİR: elle düzenlenmez,
      önceki ölçümlerin (2026-10-02/2026-10-31: schedule 0) kaydı satırın
      gövdesinde KALIR, güncel hüküm parçadadır.
 
 Fail-closed sözleşmesi (sessiz PASS yok):
-  rc 0 = ölçüldü ve kanıt temiz (pending ya da fired/success)
-  rc 1 = ölçüldü ve kanıt KÖTÜ (missed ya da fired/başarısız) — satır yine
+  rc 0 = ölçüldü ve kanıt temiz (pending ya da fired + güncel/success)
+  rc 1 = ölçüldü ve kanıt KÖTÜ (missed ya da fired + güncel/başarısız) — satır yine
          yazılır, çünkü "❌ ölçüldü" ile "boş = ölçülmedi" farklı iddialardır
   rc 2 = ÖLÇÜLEMEDİ (gh yok/API hatası/bozuk JSON/işaretler eksik) — satıra
          HİÇBİR ŞEY yazılmaz, workflow kırmızı olur
 
-Idempotent: yazma kararı hükmün KİMLİĞİNE bağlıdır — (durum, run id,
-conclusion). Ölçüm saati metinde görünür ama kimliğe girmez; aksi hâlde nöbet
-her hafta aynı hükmü yeniden yazıp boşuna bot PR'ı açardı.
+Idempotent: yazma kararı hükmün KİMLİĞİNE bağlıdır — (durum, ilk run
+id/conclusion, güncel run id/conclusion). Ölçüm saati metinde görünür ama
+kimliğe girmez; aksi hâlde nöbet her hafta aynı hükmü yeniden yazıp boşuna bot
+PR'ı açardı.
 
 OFFLINE test edilebilir: `--runs-file` + `--now` ile ağ olmadan; stdlib-only.
 """
@@ -144,7 +148,8 @@ class Verdict:
     as_of: datetime
     expected: datetime
     deadline_hours: int
-    run: Run | None = None
+    first_run: Run | None = None
+    latest_run: Run | None = None
 
     @property
     def deadline(self) -> datetime:
@@ -152,15 +157,19 @@ class Verdict:
 
     @property
     def identity(self):
-        return (self.state, self.run.id if self.run else None,
-                self.run.conclusion if self.run else None)
+        return (self.state,
+                self.first_run.id if self.first_run else None,
+                self.first_run.conclusion if self.first_run else None,
+                self.latest_run.id if self.latest_run else None,
+                self.latest_run.conclusion if self.latest_run else None)
 
     def exit_code(self) -> int:
         if self.state == "pending":
             return 0
         if self.state == "missed":
             return 1
-        return 0 if self.run is not None and self.run.conclusion == "success" else 1
+        return 0 if (self.latest_run is not None
+                     and self.latest_run.conclusion == "success") else 1
 
 
 def normalize_runs(payload) -> list[Run]:
@@ -196,19 +205,25 @@ def normalize_runs(payload) -> list[Run]:
     return runs
 
 
-def select_latest_scheduled(runs: list[Run], expected: datetime):
-    """(en güncel uygun schedule koşumu | None, toplam schedule sayısı).
+def select_scheduled_runs(runs: list[Run], expected: datetime):
+    """(ilk uygun, en güncel uygun, toplam schedule) üçlüsü.
 
     Kriter iki katmanlı:
       * `event == "schedule"` — push/PR/dispatch koşumu cron kanıtı DEĞİLDİR
         (aynı işi koşar, farklı tetikleyici; runbook bu ayrımı pin'ler).
       * `created >= expected` — armed tarihten (PR #52 merge'i sonrası ilk
         Pazartesi) ÖNCEKİ bir schedule koşumu bu tick'in kanıtı sayılmaz.
+
+    İlk koşum, ilk ateşlemenin KANITIDIR; conclusion'ı failure olsa da
+    silinmez. En güncel koşum ise bugünkü durumdur; hüküm onun
+    conclusion'ına göre verilir. Tek koşum varsa ikisi aynı nesnedir.
     """
     scheduled = [r for r in runs if r.event == "schedule"]
     after = [r for r in scheduled if r.created >= expected]
     after.sort(key=lambda r: (r.created, r.id))
-    return (after[-1] if after else None), len(scheduled)
+    return ((after[0] if after else None),
+            (after[-1] if after else None),
+            len(scheduled))
 
 
 def measure(runs: list[Run], now: datetime,
@@ -216,8 +231,8 @@ def measure(runs: list[Run], now: datetime,
             deadline_hours: int = DEFAULT_DEADLINE_HOURS) -> Verdict:
     if deadline_hours <= 0:
         raise Unmeasured("deadline-hours pozitif olmalı: %r" % (deadline_hours,))
-    run, scheduled_count = select_latest_scheduled(runs, expected)
-    if run is not None:
+    first_run, latest_run, scheduled_count = select_scheduled_runs(runs, expected)
+    if latest_run is not None:
         state = "fired"
     elif now < expected + timedelta(hours=deadline_hours):
         state = "pending"
@@ -225,7 +240,8 @@ def measure(runs: list[Run], now: datetime,
         state = "missed"
     return Verdict(state=state, schedule_count=scheduled_count,
                    total_runs=len(runs), as_of=now, expected=expected,
-                   deadline_hours=deadline_hours, run=run)
+                   deadline_hours=deadline_hours,
+                   first_run=first_run, latest_run=latest_run)
 
 
 # ── hükmü metne çevirme ───────────────────────────────────────────────────
@@ -251,16 +267,25 @@ def render_segment(v: Verdict) -> str:
                 "raporlar."
                 % (tick, v.deadline_hours))
     else:
-        run = v.run
-        assert run is not None  # state=fired ⇒ run var
-        ref = ("run [`%s`](%s)" % (run.id, run.url)) if run.url else ("run `%s`" % run.id)
-        body = ("zamanlanmış tetikleme **KANITLANDI** — son `schedule` koşumu %s, "
-                "`created_at=%s` (tick `%s`), status `%s`, conclusion `%s`; "
-                "`event=schedule` koşum sayısı **%d**. Yukarıdaki \"henüz "
-                "ateşlenmedi / schedule 0\" ifadeleri kanıttan ÖNCEKİ ölçümün "
-                "kaydıdır; güncel hüküm bu parçadır."
-                % (ref, fmt(run.created), tick, run.status or "-",
-                   run.conclusion or "-", v.schedule_count))
+        first = v.first_run
+        latest = v.latest_run
+        assert first is not None and latest is not None  # fired ⇒ iki uç var
+        def _ref(run):
+            return (("run [`%s`](%s)" % (run.id, run.url))
+                    if run.url else ("run `%s`" % run.id))
+        body = ("zamanlanmış tetikleme **KANITLANDI** — ilk `schedule` koşumu "
+                "%s, `created_at=%s` (tick `%s`), status `%s`, "
+                "conclusion `%s`; güncel `schedule` koşumu %s, "
+                "`created_at=%s`, status `%s`, conclusion `%s`. "
+                "İlk koşum ilk ateşleme kanıtı olarak KORUNUR; güncel hüküm "
+                "güncel koşumun conclusion'ıdır. `event=schedule` koşum sayısı "
+                "**%d**. Yukarıdaki \"henüz ateşlenmedi / schedule 0\" "
+                "ifadeleri kanıttan ÖNCEKİ ölçümün kaydıdır; güncel hüküm bu "
+                "parçadır."
+                % (_ref(first), fmt(first.created), tick, first.status or "-",
+                   first.conclusion or "-", _ref(latest), fmt(latest.created),
+                   latest.status or "-", latest.conclusion or "-",
+                   v.schedule_count))
     tail = (" Bu parça nöbet akışı tarafından ölçümden yeniden yazılır — elle "
             "düzenlenmez.")
     segment = head + body + tail
@@ -312,23 +337,32 @@ def write_segment(text: str, segment: str) -> str:
 
 
 def segment_identity(segment: str):
-    """Mevcut parçanın kimliği (durum, run id, conclusion) — idempotan için.
+    """Mevcut parçanın kimliği (durum, ilk run, güncel run) — idempotan için.
 
     Kimlik metinden değil hükümden türetilir; burada yalnızca "bu parça HANGİ
-    durumu iddia ediyor" sorusuna cevap verilir. Okunamayan parça → None, yani
+    durumu iddia ediyor" sorusuna cevap verilir. İlk ve güncel koşum kimlikleri
+    AYRI tutulur: ilk koşum failure'ı kanıt olarak korunurken güncel koşum
+    değiştiğinde parça yeniden yazılmalıdır. Okunamayan parça → None, yani
     "yaz" (fail-closed: bozuk parça sessizce korunmaz, ölçümle değiştirilir).
     """
     if "**KANITLANDI**" in segment:
         import re
-        m = re.search(r"run \[?`([^`]+)`\]?(?:\([^)]*\))?, `created_at=([^`]+)`"
-                      r".*conclusion `([^`]+)`", segment)
-        if m:
-            return ("fired", m.group(1), None if m.group(3) == "-" else m.group(3))
+        first_part, sep, latest_part = segment.partition("güncel `schedule` koşumu")
+        m_first = re.search(r"ilk `schedule` koşumu run \[?`([^`]+)`\]?.*?"
+                            r"conclusion `([^`]+)`", first_part)
+        m_latest = re.search(r"run \[?`([^`]+)`\]?.*?conclusion `([^`]+)`",
+                             latest_part)
+        if sep and m_first and m_latest:
+            return ("fired",
+                    m_first.group(1),
+                    None if m_first.group(2) == "-" else m_first.group(2),
+                    m_latest.group(1),
+                    None if m_latest.group(2) == "-" else m_latest.group(2))
         return None
     if "**GEÇTİ**" in segment:
-        return ("missed", None, None)
+        return ("missed", None, None, None, None)
     if "henüz GEÇMEDİ" in segment:
-        return ("pending", None, None)
+        return ("pending", None, None, None, None)
     return None
 
 
@@ -448,7 +482,8 @@ def main(argv=None) -> int:
         return 2
 
     rc = verdict.exit_code()
-    run = verdict.run
+    first = verdict.first_run
+    latest = verdict.latest_run
     payload = {
         "verdict": "PASS" if rc == 0 else "FAIL",
         "state": verdict.state,
@@ -459,10 +494,19 @@ def main(argv=None) -> int:
         "expected_first_tick": fmt(verdict.expected),
         "deadline": fmt(verdict.deadline),
         "as_of": fmt(verdict.as_of),
-        "run_id": run.id if run else None,
-        "run_created_at": fmt(run.created) if run else None,
-        "run_status": run.status if run else None,
-        "run_conclusion": run.conclusion if run else None,
+        "first_run_id": first.id if first else None,
+        "first_run_created_at": fmt(first.created) if first else None,
+        "first_run_status": first.status if first else None,
+        "first_run_conclusion": first.conclusion if first else None,
+        "latest_run_id": latest.id if latest else None,
+        "latest_run_created_at": fmt(latest.created) if latest else None,
+        "latest_run_status": latest.status if latest else None,
+        "latest_run_conclusion": latest.conclusion if latest else None,
+        # Geriye uyumluluk: eski "run" alanları güncel koşumu gösterir.
+        "run_id": latest.id if latest else None,
+        "run_created_at": fmt(latest.created) if latest else None,
+        "run_status": latest.status if latest else None,
+        "run_conclusion": latest.conclusion if latest else None,
         "doc": str(args.doc),
         "exit": rc,
     }
@@ -477,8 +521,12 @@ def main(argv=None) -> int:
                   "koşumu yok → cron'un GitHub tetiklemesi KANITLANMADI"
                   % (fmt(verdict.expected), verdict.deadline_hours))
         elif verdict.state == "fired":
-            print("  son schedule koşumu: %s (conclusion=%s)"
-                  % (payload["run_created_at"], payload["run_conclusion"]))
+            print("  ilk schedule koşumu: %s (conclusion=%s)"
+                  % (payload["first_run_created_at"],
+                     payload["first_run_conclusion"]))
+            print("  güncel schedule koşumu: %s (conclusion=%s)"
+                  % (payload["latest_run_created_at"],
+                     payload["latest_run_conclusion"]))
     return rc
 
 

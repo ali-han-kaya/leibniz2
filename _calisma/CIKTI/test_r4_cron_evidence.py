@@ -18,18 +18,22 @@ Bu dosya bekçinin iddialarını çiviler; hepsi OFFLINE ve stdlib-only:
      dispatch koşumu aynı işi koşsa da tetikleyici farklıdır — "elle koştum,
      cron çalışıyor" yanılgısı runbook'ta da yasaklanmıştır. Armed tarihten
      (PR #52 sonrası ilk Pzt) ÖNCEKİ schedule koşumu da bu tick'in kanıtı
-     değildir.
+     değildir. İlk (en erken) ve güncel (en son) koşum BİRLİKTE seçilir:
+     ilk koşum failure olsa da kanıt olarak korunur, güncel koşum ayrı raporlanır.
   K2 HÜKÜM: üç durum + fail-closed çıkış kodları. "Bekleme penceresi" (yeşil)
-     ile "tick geçti, koşum yok" (KIRMIZI) karıştırılamaz; fired ama
-     conclusion=success DEĞİL ise yine KIRMIZI (cron ateşlendi, kapı düştü).
+     ile "tick geçti, koşum yok" (KIRMIZI) karıştırılamaz; fired ise GÜNCEL
+     koşumun conclusion=success olması gerekir. İlk koşum failure'ı tek başına
+     güncel hükmü kırmızı yapmaz; güncel koşum failure'sa geçmiş yeşil koşum
+     bunu örtemez.
   K3 ÖLÇÜLEMEDİ ≠ YEŞİL: gh yok / bozuk JSON / işaretler eksik → rc 2 ve
      satıra HİÇBİR ŞEY yazılmaz. Sessiz "temiz" yok.
   K4 YAZMA: kanıt R4 satırındaki İŞARETLİ parçaya yazılır; satırın gövdesi
      (tarihli ölçümler, merge hash'i, cron ifadesi) DEĞİŞMEZ. İşaretler
      tekil değilse yazma reddedilir — sessizce ikinci bir parça eklemek
      "hangi hüküm geçerli?" sorusunu cevapsız bırakır.
-  K5 İDEMPOTANS: aynı hüküm (durum, run id, conclusion) tekrar yazılmaz;
-     ölçüm saati kimliğe girmez (girseydi nöbet her hafta boşuna PR açardı).
+  K5 İDEMPOTANS: aynı hüküm (durum, ilk run id/conclusion, güncel run
+     id/conclusion) tekrar yazılmaz; ölçüm saati kimliğe girmez (girseydi
+     nöbet her hafta boşuna PR açardı).
   K6 WORKFLOW: bekçi cron'u beklenen tick'ten SONRA ve diğer haftalık
      cron'larla çakışmadan koşar; mantık YAML'da yeniden yazılmaz (tek giriş
      noktası script, `run:` adımı); kayıt satırı ile kırmızı AYRI adımlardır
@@ -81,42 +85,52 @@ BEFORE_DEADLINE = "2026-10-05T12:00:00Z"
 
 
 class TestScheduleRunSelection(unittest.TestCase):
-    """K1 — cron kanıtı yalnız `schedule` koşumudur."""
+    """K1 — yalnız `schedule`; ilk kanıt ve güncel durum ayrı seçilir."""
 
     def test_dispatch_and_push_runs_are_not_cron_evidence(self):
         runs = [run(1, AFTER_TICK, event="workflow_dispatch"),
                 run(2, AFTER_TICK, event="push"),
                 run(3, AFTER_TICK, event="pull_request")]
-        picked, scheduled = r4.select_latest_scheduled(runs, ts(TICK))
-        self.assertIsNone(picked,
+        first, latest, scheduled = r4.select_scheduled_runs(runs, ts(TICK))
+        self.assertIsNone(first,
                           "dispatch/push/PR koşumu cron kanıtı sayılmamalı — "
                           "aynı işi koşsalar da tetikleyici farklıdır")
+        self.assertIsNone(latest)
         self.assertEqual(scheduled, 0)
 
-    def test_latest_schedule_run_after_the_tick_wins(self):
-        runs = [run(30, "2026-10-19T09:19:00Z"),
-                run(10, AFTER_TICK),
-                run(20, "2026-10-12T11:20:00Z")]
-        picked, scheduled = r4.select_latest_scheduled(runs, ts(TICK))
-        self.assertEqual(picked.id, "30", "en güncel schedule koşumu seçilmeli")
+    def test_first_failure_and_latest_success_are_both_selected(self):
+        runs = [run(30, "2026-10-19T09:19:00Z", conclusion="success"),
+                run(10, AFTER_TICK, conclusion="failure"),
+                run(20, "2026-10-12T11:20:00Z", conclusion="success")]
+        first, latest, scheduled = r4.select_scheduled_runs(runs, ts(TICK))
+        self.assertEqual(first.id, "10",
+                         "ilk ateşleme kanıtı korunmalı (en erken)")
+        self.assertEqual(first.conclusion, "failure")
+        self.assertEqual(latest.id, "30",
+                         "güncel durum en son schedule koşumu olmalı")
+        self.assertEqual(latest.conclusion, "success")
         self.assertEqual(scheduled, 3)
 
     def test_schedule_run_before_the_armed_date_is_not_this_ticks_evidence(self):
         # Armed tarih PR #52 merge'i (2026-09-30) sonrası ilk Pazartesi'dir;
         # ondan önceki bir schedule koşumu bu tick'i kanıtlamaz.
         runs = [run(5, "2026-09-28T03:43:00Z")]
-        picked, scheduled = r4.select_latest_scheduled(runs, ts(TICK))
-        self.assertIsNone(picked,
+        first, latest, scheduled = r4.select_scheduled_runs(runs, ts(TICK))
+        self.assertIsNone(first,
                           "armed tarihten önceki schedule koşumu bu tick'in "
                           "kanıtı değildir (ama sayımda görünür)")
+        self.assertIsNone(latest)
         self.assertEqual(scheduled, 1)
 
     def test_tie_break_is_deterministic(self):
         a = run(7, AFTER_TICK)
         b = run(9, AFTER_TICK)
-        self.assertEqual(r4.select_latest_scheduled([b, a], ts(TICK))[0].id,
-                         r4.select_latest_scheduled([a, b], ts(TICK))[0].id,
-                         "aynı created_at'te sıra girdi sırasına bağlı olmamalı")
+        first_a, latest_a, _ = r4.select_scheduled_runs([b, a], ts(TICK))
+        first_b, latest_b, _ = r4.select_scheduled_runs([a, b], ts(TICK))
+        self.assertEqual(first_a.id, first_b.id,
+                         "aynı created_at'te ilk koşum sırası girdi sırasına bağlı olmamalı")
+        self.assertEqual(latest_a.id, latest_b.id,
+                         "aynı created_at'te güncel koşum sırası girdi sırasına bağlı olmamalı")
 
 
 class TestVerdictStates(unittest.TestCase):
@@ -143,6 +157,27 @@ class TestVerdictStates(unittest.TestCase):
         v = r4.measure([run(11, AFTER_TICK)], ts(AFTER_DEADLINE))
         self.assertEqual(v.state, "fired")
         self.assertEqual(v.exit_code(), 0)
+
+    def test_first_failure_is_preserved_while_latest_success_is_green(self):
+        v = r4.measure([run(10, AFTER_TICK, conclusion="failure"),
+                        run(20, "2026-10-12T11:20:00Z", conclusion="success")],
+                       ts(AFTER_DEADLINE))
+        self.assertEqual(v.state, "fired")
+        self.assertEqual(v.first_run.id, "10")
+        self.assertEqual(v.first_run.conclusion, "failure")
+        self.assertEqual(v.latest_run.id, "20")
+        self.assertEqual(v.exit_code(), 0,
+                         "ilk koşum failure'ı kanıt; güncel success hükmü yeşil yapar")
+
+    def test_latest_failure_is_red_even_if_first_succeeded(self):
+        v = r4.measure([run(10, AFTER_TICK, conclusion="success"),
+                        run(20, "2026-10-12T11:20:00Z", conclusion="failure")],
+                       ts(AFTER_DEADLINE))
+        self.assertEqual(v.state, "fired")
+        self.assertEqual(v.first_run.conclusion, "success")
+        self.assertEqual(v.latest_run.conclusion, "failure")
+        self.assertEqual(v.exit_code(), 1,
+                         "güncel koşum kırmızıysa geçmiş yeşil koşum bunu örtemez")
 
     def test_fired_failure_is_red(self):
         v = r4.measure([run(11, AFTER_TICK, conclusion="failure")],
@@ -183,7 +218,10 @@ class TestSegmentRendering(unittest.TestCase):
         return {
             "pending": r4.measure([], ts(BEFORE_DEADLINE)),
             "missed": r4.measure([], ts(AFTER_DEADLINE)),
-            "fired": r4.measure([run(4242, AFTER_TICK)], ts(AFTER_DEADLINE)),
+            "fired": r4.measure([run(4242, AFTER_TICK, conclusion="failure"),
+                                  run(7777, "2026-10-12T11:20:00Z",
+                                      conclusion="success")],
+                                 ts(AFTER_DEADLINE)),
         }
 
     def test_segment_names_the_watchdog_and_the_measurement_time(self):
@@ -218,13 +256,16 @@ class TestSegmentRendering(unittest.TestCase):
         self.assertIn(r4.fmt(ts(TICK)), seg,
                       "hangi tick'in beklendiği yazılı olmalı")
 
-    def test_fired_segment_carries_the_run_identity(self):
+    def test_fired_segment_carries_first_and_latest_run_identity(self):
         seg = r4.render_segment(self._states()["fired"])
-        for needle in ("**KANITLANDI**", "`4242`", "2026-10-05T10:51Z",
+        for needle in ("**KANITLANDI**", "ilk `schedule` koşumu", "`4242`",
+                       "2026-10-05T10:51Z", "conclusion `failure`",
+                       "güncel `schedule` koşumu", "`7777`",
                        "conclusion `success`"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, seg,
-                              "kanıt satırı run kimliğini taşımalı: %s" % needle)
+                              "kanıt satırı ilk ve güncel run kimliğini "
+                              "ayrı taşımalı: %s" % needle)
 
 
 class TestRowWrite(unittest.TestCase):
@@ -295,6 +336,22 @@ class TestIdempotence(unittest.TestCase):
         self.assertIn("`777`", new)
         self.assertIn("gövde metni", new, "gövde korunmalı")
 
+    def test_first_failure_and_latest_success_have_a_stable_identity(self):
+        doc = self._doc()
+        runs = [run(10, AFTER_TICK, conclusion="failure"),
+                run(20, "2026-10-12T11:20:00Z", conclusion="success")]
+        new, changed = r4.apply_verdict(
+            doc, r4.measure(runs, ts(AFTER_DEADLINE)))
+        self.assertTrue(changed)
+        self.assertIn("`10`", new)
+        self.assertIn("conclusion `failure`", new)
+        self.assertIn("`20`", new)
+        again, changed_again = r4.apply_verdict(
+            new, r4.measure(runs, ts("2026-10-13T05:17:00Z")))
+        self.assertFalse(changed_again,
+                         "aynı ilk+güncel koşum kimliği yeniden yazılmamalı")
+        self.assertEqual(again, new)
+
     def test_unparsable_segment_is_replaced_not_preserved(self):
         # Fail-closed: tanınmayan bir parça sessizce korunmaz — ölçümle değişir.
         doc = self._doc().replace("**GEÇTİ**", "elle yazılmış serbest metin")
@@ -329,6 +386,14 @@ class TestRealDocContract(unittest.TestCase):
                              "parça tanınmış bir hüküm taşımalı — okunamayan "
                              "parça 'hangi hüküm geçerli?' sorusunu bırakır")
         self.assertIn(identity[0], r4.STATES)
+
+    def test_segment_reports_first_failure_and_latest_separately(self):
+        seg = r4.read_segment(self.row)
+        self.assertIn("ilk `schedule` koşumu", seg)
+        self.assertIn("güncel `schedule` koşumu", seg)
+        self.assertIn("37299256892", seg,
+                      "ilk failure kanıtı makine parçasında korunmalı")
+        self.assertIn("conclusion `failure`", seg)
 
     def test_segment_names_the_watchdog_workflow(self):
         seg = r4.read_segment(self.row)
@@ -389,12 +454,52 @@ class TestCliOffline(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         payload = json.loads(r.stdout)
         self.assertEqual(payload["state"], "fired")
-        self.assertEqual(payload["run_id"], "4242")
+        self.assertEqual(payload["first_run_id"], "4242")
+        self.assertEqual(payload["latest_run_id"], "4242")
         self.assertTrue(payload["changed"])
         text = self.doc.read_text(encoding="utf-8")
         self.assertIn("**KANITLANDI**", text)
+        self.assertIn("ilk `schedule` koşumu", text)
+        self.assertIn("güncel `schedule` koşumu", text)
         self.assertIn("`4242`", text)
         self.assertIn("gövde", text)
+
+    def test_first_failure_is_preserved_while_latest_success_is_reported(self):
+        runs = self._runs([
+            gh_item(111, AFTER_TICK, conclusion="failure"),
+            gh_item(222, "2026-10-12T11:20:00Z", conclusion="success"),
+        ])
+        r = self._cli("--runs-file", runs, "--now", AFTER_DEADLINE,
+                      "--apply", "--json")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        payload = json.loads(r.stdout)
+        self.assertEqual(payload["state"], "fired")
+        self.assertEqual(payload["first_run_id"], "111")
+        self.assertEqual(payload["first_run_conclusion"], "failure")
+        self.assertEqual(payload["latest_run_id"], "222")
+        self.assertEqual(payload["latest_run_conclusion"], "success")
+        text = self.doc.read_text(encoding="utf-8")
+        self.assertIn("`111`", text)
+        self.assertIn("conclusion `failure`", text)
+        self.assertIn("`222`", text)
+        self.assertIn("conclusion `success`", text)
+        self.assertIn("gövde", text)
+
+    def test_latest_failure_is_red_even_if_first_succeeded(self):
+        runs = self._runs([
+            gh_item(111, AFTER_TICK, conclusion="success"),
+            gh_item(222, "2026-10-12T11:20:00Z", conclusion="failure"),
+        ])
+        r = self._cli("--runs-file", runs, "--now", AFTER_DEADLINE,
+                      "--apply", "--json")
+        self.assertEqual(r.returncode, 1, r.stderr)
+        payload = json.loads(r.stdout)
+        self.assertEqual(payload["first_run_conclusion"], "success")
+        self.assertEqual(payload["latest_run_conclusion"], "failure")
+        text = self.doc.read_text(encoding="utf-8")
+        self.assertIn("`111`", text)
+        self.assertIn("`222`", text)
+        self.assertIn("conclusion `failure`", text)
 
     def test_second_run_with_the_same_verdict_writes_nothing(self):
         runs = self._runs([gh_item(4242, AFTER_TICK)])
@@ -547,6 +652,14 @@ class TestWorkflowContract(unittest.TestCase):
         # `docs(deploy)` → deploy_evidence.DEFAULT_GAP_EXEMPT: kanıt kaydı
         # commit'i kanıt boşluğunu ilerletmez.
         self.assertIn("docs(deploy)", self.text)
+
+    def test_commit_message_names_first_and_latest(self):
+        blocks = re.split(r"\n(?=\s*- name:)", self.text)
+        commit = next((b for b in blocks if "Commit R4 segment" in b), "")
+        self.assertIn("ilk", commit,
+                      "commit mesajı ilk koşum kanıtının korunduğunu söylemeli")
+        self.assertIn("güncel", commit,
+                      "commit mesajı güncel koşum durumunu ayrıca söylemeli")
 
     def test_workflow_touches_the_same_document_the_script_defaults_to(self):
         """Bot PR'ı, betiğin yazdığı belgenin AYNISINI stage'lemeli."""
