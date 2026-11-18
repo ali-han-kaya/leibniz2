@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""r4_cron_evidence.py — haftalık docker-security cron'unun İLK `schedule`
+"""r4_cron_evidence.py — haftalık docker-security cron'unun SON `schedule`
 koşumunu ölçer ve R4 denetim satırına kanıt olarak yazar.
 
 Tarihsel kök-neden (bu oturum): R4 satırı "cron PR #52 merge'i ile
@@ -24,8 +24,8 @@ Bu betik o sessizliği ölçülebilir hâle getirir. Tek giriş noktasıdır
 
   1) `docker-security.yml`'in koşumlarını okur (tek kaynak: `gh run list`,
      R4 satırının kendi ölçüm komutuyla aynı — `--runs-file` ile offline).
-  2) `event=schedule` koşumlarını ayırır, **beklenen ilk tick'ten
-     (2026-10-05T03:43Z) sonraki EN ERKEN** koşumu seçer. Push / PR /
+  2) `event=schedule` koşumlarını ayırır, **beklenen tick'ten
+     (2026-10-05T03:43Z) sonraki EN GÜNCEL** koşumu seçer. Push / PR /
      dispatch koşumları cron kanıtı SAYILMAZ: aynı yolu koşsalar da
      tetikleyici farklıdır (runbook'un "elle koşum ne kanıtlar" ayrımı).
   3) Üç durumdan birini hükmeder:
@@ -196,8 +196,8 @@ def normalize_runs(payload) -> list[Run]:
     return runs
 
 
-def select_first_scheduled(runs: list[Run], expected: datetime):
-    """(ilk uygun schedule koşumu | None, toplam schedule sayısı).
+def select_latest_scheduled(runs: list[Run], expected: datetime):
+    """(en güncel uygun schedule koşumu | None, toplam schedule sayısı).
 
     Kriter iki katmanlı:
       * `event == "schedule"` — push/PR/dispatch koşumu cron kanıtı DEĞİLDİR
@@ -208,7 +208,7 @@ def select_first_scheduled(runs: list[Run], expected: datetime):
     scheduled = [r for r in runs if r.event == "schedule"]
     after = [r for r in scheduled if r.created >= expected]
     after.sort(key=lambda r: (r.created, r.id))
-    return (after[0] if after else None), len(scheduled)
+    return (after[-1] if after else None), len(scheduled)
 
 
 def measure(runs: list[Run], now: datetime,
@@ -216,7 +216,7 @@ def measure(runs: list[Run], now: datetime,
             deadline_hours: int = DEFAULT_DEADLINE_HOURS) -> Verdict:
     if deadline_hours <= 0:
         raise Unmeasured("deadline-hours pozitif olmalı: %r" % (deadline_hours,))
-    run, scheduled_count = select_first_scheduled(runs, expected)
+    run, scheduled_count = select_latest_scheduled(runs, expected)
     if run is not None:
         state = "fired"
     elif now < expected + timedelta(hours=deadline_hours):
@@ -254,7 +254,7 @@ def render_segment(v: Verdict) -> str:
         run = v.run
         assert run is not None  # state=fired ⇒ run var
         ref = ("run [`%s`](%s)" % (run.id, run.url)) if run.url else ("run `%s`" % run.id)
-        body = ("zamanlanmış tetikleme **KANITLANDI** — ilk `schedule` koşumu %s, "
+        body = ("zamanlanmış tetikleme **KANITLANDI** — son `schedule` koşumu %s, "
                 "`created_at=%s` (tick `%s`), status `%s`, conclusion `%s`; "
                 "`event=schedule` koşum sayısı **%d**. Yukarıdaki \"henüz "
                 "ateşlenmedi / schedule 0\" ifadeleri kanıttan ÖNCEKİ ölçümün "
@@ -477,7 +477,7 @@ def main(argv=None) -> int:
                   "koşumu yok → cron'un GitHub tetiklemesi KANITLANMADI"
                   % (fmt(verdict.expected), verdict.deadline_hours))
         elif verdict.state == "fired":
-            print("  ilk schedule koşumu: %s (conclusion=%s)"
+            print("  son schedule koşumu: %s (conclusion=%s)"
                   % (payload["run_created_at"], payload["run_conclusion"]))
     return rc
 

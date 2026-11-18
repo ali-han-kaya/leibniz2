@@ -87,25 +87,25 @@ class TestScheduleRunSelection(unittest.TestCase):
         runs = [run(1, AFTER_TICK, event="workflow_dispatch"),
                 run(2, AFTER_TICK, event="push"),
                 run(3, AFTER_TICK, event="pull_request")]
-        picked, scheduled = r4.select_first_scheduled(runs, ts(TICK))
+        picked, scheduled = r4.select_latest_scheduled(runs, ts(TICK))
         self.assertIsNone(picked,
                           "dispatch/push/PR koşumu cron kanıtı sayılmamalı — "
                           "aynı işi koşsalar da tetikleyici farklıdır")
         self.assertEqual(scheduled, 0)
 
-    def test_earliest_schedule_run_after_the_tick_wins(self):
+    def test_latest_schedule_run_after_the_tick_wins(self):
         runs = [run(30, "2026-10-19T09:19:00Z"),
                 run(10, AFTER_TICK),
                 run(20, "2026-10-12T11:20:00Z")]
-        picked, scheduled = r4.select_first_scheduled(runs, ts(TICK))
-        self.assertEqual(picked.id, "10", "ilk tick'in koşumu seçilmeli (en erken)")
+        picked, scheduled = r4.select_latest_scheduled(runs, ts(TICK))
+        self.assertEqual(picked.id, "30", "en güncel schedule koşumu seçilmeli")
         self.assertEqual(scheduled, 3)
 
     def test_schedule_run_before_the_armed_date_is_not_this_ticks_evidence(self):
         # Armed tarih PR #52 merge'i (2026-09-30) sonrası ilk Pazartesi'dir;
         # ondan önceki bir schedule koşumu bu tick'i kanıtlamaz.
         runs = [run(5, "2026-09-28T03:43:00Z")]
-        picked, scheduled = r4.select_first_scheduled(runs, ts(TICK))
+        picked, scheduled = r4.select_latest_scheduled(runs, ts(TICK))
         self.assertIsNone(picked,
                           "armed tarihten önceki schedule koşumu bu tick'in "
                           "kanıtı değildir (ama sayımda görünür)")
@@ -114,8 +114,8 @@ class TestScheduleRunSelection(unittest.TestCase):
     def test_tie_break_is_deterministic(self):
         a = run(7, AFTER_TICK)
         b = run(9, AFTER_TICK)
-        self.assertEqual(r4.select_first_scheduled([b, a], ts(TICK))[0].id,
-                         r4.select_first_scheduled([a, b], ts(TICK))[0].id,
+        self.assertEqual(r4.select_latest_scheduled([b, a], ts(TICK))[0].id,
+                         r4.select_latest_scheduled([a, b], ts(TICK))[0].id,
                          "aynı created_at'te sıra girdi sırasına bağlı olmamalı")
 
 
@@ -382,7 +382,7 @@ class TestCliOffline(unittest.TestCase):
              "--doc", str(self.doc), *args],
             capture_output=True, text=True)
 
-    def test_first_schedule_run_is_detected_and_written(self):
+    def test_schedule_run_is_detected_and_written(self):
         runs = self._runs([gh_item(4242, AFTER_TICK)])
         r = self._cli("--runs-file", runs, "--now", AFTER_DEADLINE,
                       "--apply", "--json")
