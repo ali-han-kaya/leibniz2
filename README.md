@@ -734,3 +734,15 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | R2 | 2026-08-21 | summary yerelde yazılmıyor | `GITHUB_STEP_SUMMARY` env boştu | iki aşamalı write + validate | `2282925` |
 | R3 | 2026-08-21 | pre-commit block (actionlint RC=1) | shellcheck info hints advisory iken fail | `lint_actionlint.sh` RC≤2 PASS | `ae55009` |
 | R4 | 2026-08-21 | `listLabels is not a function` | Octokit `listLabels` → `listLabelsForRepo` | 4 dosya güncellendi | `309a14f` |
+
+## Lisans
+
+| Kapsam | Lisans | Dosya |
+|---|---|---|
+| Kod (betikler, CI, testler, otomasyon) | MIT | [`LICENSE`](LICENSE) |
+| Akademik/metinsel içerik (LaTeX, makale, raporlar, ispat metinleri) | CC-BY-4.0 | [`LICENSE-CC-BY-4.0`](LICENSE-CC-BY-4.0) |
+
+GitHub bu iki dosyayı iki ayrı lisans olarak listeler (`MIT, CC-BY-4.0`); bu bir
+çakışma değil, kapsam ayrımıdır. Aynı MIT metnini taşıyan ikinci bir
+`LICENSE-MIT` dosyası "MIT, MIT licenses found" görünümüne yol açtığı için
+kaldırıldı.
