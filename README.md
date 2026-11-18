@@ -724,6 +724,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-18 | fix | (ci) capture r4 verdict before shell errexit | [`d11624c`](https://github.com/ali-han-kaya/leibniz2/commit/d11624c) |
 | 2026-11-18 | docs | (deploy) record f8d9608d evidence and heal changelog (#229) | [`d6fe986`](https://github.com/ali-han-kaya/leibniz2/commit/d6fe986) |
 | 2026-11-18 | fix | (docker) apt/libapt-pkg6.0 floor 2.6.2 (CVE-2026-109518) (#212) | [`e987ec1`](https://github.com/ali-han-kaya/leibniz2/commit/e987ec1) |
+| 2026-11-18 | fix | (r4) evaluate latest schedule run, not historical first | [`3b3e08c`](https://github.com/ali-han-kaya/leibniz2/commit/3b3e08c) |
 
 ### Regresyon notları
 
