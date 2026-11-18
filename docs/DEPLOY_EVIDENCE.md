@@ -434,3 +434,16 @@ push seti yeşil değildi (`df018aba` verify-delivery #41980292002 cancelled;
 ölçümü taşır (#41996055245, 2026-11-05, `headSha=cb9af4ae`, success).
 `substantive_gap(590be2e5, main)` = 0; satırı yazan commit `docs(deploy)` →
 `DEFAULT_GAP_EXEMPT`. Boşluk 2/3'ten 0/3'e indi.
+
+| 2026-11-18 | f8d9608d | [success #44299578974](https://github.com/ali-han-kaya/leibniz2/actions/runs/44299578974) | [success #44299578912](https://github.com/ali-han-kaya/leibniz2/actions/runs/44299578912) | [success #44299578898](https://github.com/ali-han-kaya/leibniz2/actions/runs/44299578898) | [success #44290051302](https://github.com/ali-han-kaya/leibniz2/actions/runs/44290051302) |
+
+`f8d9608d` — PR #225 (`chore(trend): record missing 2026-11-05..11-18 rows`) merge'ü.
+Ledger'in önceki en yeni satırı `590be2e5` (2026-11-05) idi; aradaki anlamlı
+commit'ler `f3faa168` (runner pin), `d11624c4` (r4 errexit fix) ve `f8d9608d`
+(trend kaydı) idi; gap 3/3'e ulaşmıştı. `f8d9608d` push'unda üç zorunlu workflow
+yeşil: `verify-delivery` #44299578974 (K1-K19 job'u completed/success),
+`docker-security` #44299578912 ve `test-smoke` #44299578898. `determinism-trend`
+hücresi son ölçümü taşır: #44290051302 (2026-11-18, `ubuntu-24.04` pinli,
+29 ölçüm, success). R4 bot commit'leri `88a5b696` / `0cf72053` `docs(deploy)`
+olduğu için gap sayımına girmez; bu satırı yazan commit de `docs(deploy)` →
+`DEFAULT_GAP_EXEMPT`. Boşluk 3/3'ten 0/3'e indi.
