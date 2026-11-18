@@ -122,9 +122,13 @@ RUN set -eux; \
 #   tzdata: DLA-4792-1 (2026b → düzeltme 2026c-0+deb12u1) → floor
 #     2026e-0+deb12u1; severity UNKNOWN — kapı seti seviye-bilinmeyen
 #     sonucu da fail-closed bloklar.
+#   apt + libapt-pkg6.0: CVE-2026-109518 (on-path saldırısı) → floor
+#     2.6.2 (kanıt: 2026-11-05, docker-security kırmızı; kurulu 2.6.1,
+#     düzeltme 2.6.2 — aday `apt-cache policy`, bookworm-security).
+#     Tek kaynak paket iki adla taranıyor (apt + libapt-pkg6.0).
 #     Girdi SECURITY_PATCH_PACKAGES default'unda yaşar — pasif kayıt,
 #     her build'de taze yama.
-ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2 libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 tzdata=2026e-0+deb12u1"
+ARG SECURITY_PATCH_PACKAGES="libpcre2-8-0=10.42-1+deb12u2 libssl3=3.0.22-1~deb12u2 openssl=3.0.22-1~deb12u2 tzdata=2026e-0+deb12u1 apt=2.6.2 libapt-pkg6.0=2.6.2"
 RUN set -eux; \
     if [ "$(printf '%s' "$SECURITY_PATCH_PACKAGES" | tr -d '[:space:]')" = "" ]; then \
       echo "SECURITY_PATCH_PACKAGES empty — no targeted apt patch"; \
