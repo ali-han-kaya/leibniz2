@@ -244,7 +244,8 @@ jobs:
 
           # (1) Kayıp koruması: bot dalında, main'de olmayan kayıt varsa
           #     üstüne yazma — hepsini birleştirip aynı commit'te taşı
-          #     (trend_record_merge.py: JSONL satırı tam metin kimliktir).
+          #     (trend_record_merge.py: kimlik (date, platform, family); farklı
+          #     source_mtime aynı anahtarı ikinci kez ekleyemez).
           if git fetch --depth=1 origin "$TREND_BRANCH" 2>/dev/null; then
             git show "FETCH_HEAD:$RECORD" > /tmp/trend_branch.jsonl 2>/dev/null || true
             python3 _calisma/CIKTI/trend_record_merge.py \

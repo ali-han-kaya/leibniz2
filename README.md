@@ -729,6 +729,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-18 | docs | (deploy) record e5eb evidence | [`e03041fc`](https://github.com/ali-han-kaya/leibniz2/commit/e03041fc) |
 | 2026-11-18 | docs | (deploy) record 3d054305 evidence | [`0729018`](https://github.com/ali-han-kaya/leibniz2/commit/0729018) |
 | 2026-11-18 | fix | (r4) preserve first failure and report current run | [`7cce9806`](https://github.com/ali-han-kaya/leibniz2/commit/7cce9806) |
+| 2026-11-19 | docs | (deploy) record 7cce9806 and 59d8afd3 evidence | [`fb570b00`](https://github.com/ali-han-kaya/leibniz2/commit/fb570b00) |
 
 ### Regresyon notları
 
