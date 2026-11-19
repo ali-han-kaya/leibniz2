@@ -728,6 +728,7 @@ içindedir ve `unzip` ile yeniden üretilebilir.
 | 2026-11-18 | ci | (mirror) add fail-closed stale mirror probe | [`77cd079`](https://github.com/ali-han-kaya/leibniz2/commit/77cd079) |
 | 2026-11-18 | docs | (deploy) record e5eb evidence | [`e03041fc`](https://github.com/ali-han-kaya/leibniz2/commit/e03041fc) |
 | 2026-11-18 | docs | (deploy) record 3d054305 evidence | [`0729018`](https://github.com/ali-han-kaya/leibniz2/commit/0729018) |
+| 2026-11-18 | fix | (r4) preserve first failure and report current run | [`7cce9806`](https://github.com/ali-han-kaya/leibniz2/commit/7cce9806) |
 
 ### Regresyon notları
 
